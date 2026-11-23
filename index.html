@@ -84,7 +84,7 @@ th{text-align:left;font-weight:500;color:var(--soft);font-size:.85rem;padding:6p
 td{padding:8px;border-bottom:1px solid var(--line)}
 td.he{font:700 1.6rem 'Frank Ruhl Libre',serif;direction:rtl}
 details{margin-top:14px;color:var(--soft);font-size:.88rem}
-details code{word-break:break-all}
+details code{word-break:break-all;white-space:pre-wrap;display:block;user-select:all}
 footer{margin-top:26px;color:var(--soft);font-size:.86rem;max-width:70ch}
 </style>
 </head>
@@ -267,20 +267,23 @@ const keyOf=(u,h)=>u.name+'|'+u.phone+'>'+(h??'-');
 function review(output,vocab,lesson,strictness,W){
   const S=STRICT[strictness]||STRICT.normal,units=lesson.units;
   const heard=extractSegments(output,vocab);
-  if(!units.length||heard.length<3||heard.length>units.length*2.3+12)return null;
+  if(!units.length||heard.length<3)return null;
   const{aligned,cost}=alignment(units,heard);
   const exact=units.map((u,i)=>aligned[i]?.sound===u.phone);
-  if(exact.filter(Boolean).length/units.length<.48||cost/units.length>.66)return null;
+  const match=exact.filter(Boolean).length/units.length;
+  // Low confidence: still show the reading, but never call anything a mistake.
+  const low=match<.48||cost/units.length>.66||heard.length>units.length*2.3+12;
   const res=units.map((u,i)=>({...u,heard:aligned[i]?.sound??null,status:'ok'}));
   const anchored=(a,b)=>exact.slice(Math.max(0,a),Math.min(units.length,b)).some(Boolean);
   for(let start=0;start<units.length;){
     const w=units[start].w;let end=start+1;while(end<units.length&&units[end].w===w)end++;
     const bracketed=(start===0||anchored(start-3,start))&&(end===units.length||anchored(end,end+3));
-    if(end-start>=2&&bracketed&&aligned.slice(start,end).every(x=>!x)){
+    if(!low&&end-start>=2&&bracketed&&aligned.slice(start,end).every(x=>!x)){
       for(let k=start;k<end;k++)res[k].status='skip';start=end;continue;}
     for(let i=start;i<end;i++){
       const u=units[i],seg=aligned[i],r=res[i];
       if(exact[i]){r.status='ok';continue;}
+      if(low){r.status='unclear';continue;}
       if(u.uncertain){r.status='unclear';continue;}
       const local=(i===0||exact[i-1])&&(i===units.length-1||exact[i+1]);
       const t=W[keyOf(u,seg?.sound)]||0;
@@ -293,7 +296,7 @@ function review(output,vocab,lesson,strictness,W){
          (u.kind==='vowel')===VOWEL_SOUNDS.has(seg.sound)&&(!close||allowClose))r.status='flag';
       else r.status='unclear';}
     start=end;}
-  return{units:res,heard:heard.map(h=>h.sound)};}
+  return{units:res,heard:heard.map(h=>h.sound),low,match};}
 
 // Group sounds into letter-level units for display and training.
 const RANK={flag:3,skip:2,unclear:1,ok:0};
@@ -527,7 +530,7 @@ async function check(){
     const samples=await toSamples(lastBlob);
     if(samples.length<16000*.5){status('That recording is too short. Try again.');return;}
     lastOut=await inference(session,samples);
-    if(recheck()!==false)status($('training').checked?'Done. Tap any letter to correct the checker.':'Done. Play the recording to hear the marked letters.');
+    if(recheck()!==false)status(result&&result.low?'Hard to follow. Open "Sounds the computer heard" below and send me what it says.':($('training').checked?'Done. Tap any letter to correct the checker.':'Done. Play the recording to hear the marked letters.'));
   }catch(e){console.error(e);
     status(e.message==='download'||e.message==='size'?'The speech model could not download. Check the internet connection and try again.':'That audio could not be checked. Try recording again.');}
   finally{busy=false;$('rec').disabled=false;$('again').disabled=false;}
@@ -538,18 +541,20 @@ function recheck(){
   const lesson=buildLesson(text(),$('trad').value,$('elokim').checked);
   const r=review(lastOut,vocabInfo,lesson,$('strict').value,getW());
   if(!r){result=null;drawVerse();drawTrainer();$('results').hidden=true;
-    status('Could not follow this reading. Check the right passuk is chosen, read clearly near the microphone, and try again.');return false;}
-  result={words:lesson.words,groups:groupUnits(r.units)};lastIpa=show(r.heard);
+    status('No speech was heard. Check the microphone and try again.');return false;}
+  result={words:lesson.words,groups:groupUnits(r.units),low:r.low};lastIpa=show(r.heard);
+  window.__expected=show(lesson.units.map(u=>u.phone));window.__match=Math.round(r.match*100);
   drawVerse();drawTrainer();
   const bad=result.groups.filter(g=>g.status==='flag'||g.status==='skip'),unsure=result.groups.filter(g=>g.status==='unclear').length;
   const badWords=new Set(bad.map(g=>g.w)).size,n=result.words.length;
-  $('summary').textContent=(bad.length?`${n-badWords} of ${n} words read well.`:`No mistakes found.`)+(unsure?` ${unsure} sound${unsure>1?'s':''} unclear (dotted): listen yourself.`:'');
+  if(r.low){$('summary').textContent=`Hard to follow this reading (${window.__match}% of sounds matched), so nothing is marked wrong. Dotted = not sure.`;}
+  else $('summary').textContent=(bad.length?`${n-badWords} of ${n} words read well.`:`No mistakes found.`)+(unsure?` ${unsure} sound${unsure>1?'s':''} unclear (dotted): listen yourself.`:'');
   $('notes').innerHTML=bad.map(g=>{const seg=segments(result.words[g.w])[g.c];
     const exp=show(g.items.map(i=>i.phone)),hrd=show(g.items.map(i=>i.heard).filter(Boolean));
     const what=g.kind==='vowel'?g.name:'letter sound';
     const t=g.status==='skip'?`${what} may be skipped (should be "${exp}")`:`${what}: should be "${exp}", heard "${hrd}"`;
     return `<li><b dir="rtl">${esc(seg)}</b> ${esc(t)}</li>`;}).join('');
-  $('raw').textContent=lastIpa||'(nothing)';
+  $('raw').textContent=`Expected: ${window.__expected}\nHeard: ${lastIpa||'(nothing)'}\nMatched: ${window.__match}%`;
   $('results').hidden=false;return true;
 }
 drawVerse();drawLearned();countRecs();
