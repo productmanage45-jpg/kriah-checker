@@ -224,6 +224,8 @@ const ALIASES={a:'a ɑ ɐ æ ʌ aɪ',o:'o ɔ ɒ oʊ əʊ',i:'i ɪ ɨ',e:'e ɛ',e
 const NAME_BY_TOKEN=new Map();for(const[name,vals]of Object.entries(ALIASES))for(const v of vals.split(' '))NAME_BY_TOKEN.set(v,name);
 const NEAR=[['e','ey'],['o','oy'],['ə','e'],['ə','a'],['s','z'],['t','d'],['b','v'],['i','y']];
 const CLOSE=new Set(NEAR.flatMap(([a,b])=>[a+'/'+b,b+'/'+a]));
+// How this model hears a Chabad/Ashkenazi accent: counted as a match unless the teacher marks it stricter.
+const ALIKE=new Set([['r','d'],['ts','s'],['ts','t'],['e','ey'],['o','oy'],['o','a'],['ə','i'],['ə','e'],['ə','a'],['i','ey']].flatMap(([a,b])=>[a+'/'+b,b+'/'+a]));
 
 function makeVocab(vocab){const labels=new Array(Object.keys(vocab).length);
   for(const[tok,id]of Object.entries(vocab))labels[id]=NAME_BY_TOKEN.get(tok.replace(/[ːˑˈˌ]/gu,''));
@@ -251,7 +253,7 @@ function alignment(units,segments){
   for(let i=0;i<=units.length;i++)for(let j=0;j<cols;j++){
     if(!i&&!j)continue;const cell=i*cols+j,u=units[i-1],h=segments[j-1];let cost=Infinity,step=0;
     if(i&&j){const same=(u.kind==='vowel')===VOWEL_SOUNDS.has(h.sound),gap=h.supported[u.phone]??10;
-      const change=u.phone===h.sound?0:Math.min(same?1.1:2,.3+.25*gap);cost=costs[cell-cols-1]+change;step=1;}
+      const change=u.phone===h.sound?0:ALIKE.has(u.phone+'/'+h.sound)?.15:Math.min(same?1.1:2,.3+.25*gap);cost=costs[cell-cols-1]+change;step=1;}
     const skip=i?costs[cell-cols]+omission(u):Infinity;if(skip<cost){cost=skip;step=2;}
     const extra=j?costs[cell-1]+.83:Infinity;if(extra<cost){cost=extra;step=3;}
     costs[cell]=cost;steps[cell]=step;}
@@ -269,7 +271,7 @@ function review(output,vocab,lesson,strictness,W){
   const heard=extractSegments(output,vocab);
   if(!units.length||heard.length<3)return null;
   const{aligned,cost}=alignment(units,heard);
-  const exact=units.map((u,i)=>aligned[i]?.sound===u.phone);
+  const exact=units.map((u,i)=>{const s=aligned[i]?.sound;return s===u.phone||(s!=null&&ALIKE.has(u.phone+'/'+s)&&!((W[keyOf(u,s)]||0)<0));});
   const match=exact.filter(Boolean).length/units.length;
   // Low confidence: still show the reading, but never call anything a mistake.
   const low=match<.48||cost/units.length>.66||heard.length>units.length*2.3+12;
