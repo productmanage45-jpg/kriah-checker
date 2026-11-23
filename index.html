@@ -20,7 +20,7 @@
   --accent:#7db4dc;--accent-ink:#0d1a24;--good:#7fd1a0;--good-bg:#1f3a2b;--miss:#ff9b72;--miss-bg:#45261a;--yel:#ffd772;--yel-bg:#433715;--blue:#9cc3ff;--blue-bg:#1b2c4a;
   color-scheme:dark;}}
 *{box-sizing:border-box}
-  [hidden]{display:none!important}
+[hidden]{display:none!important}
 body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.55 Rubik,system-ui,sans-serif}
 .wrap{max-width:900px;margin:0 auto;padding:28px 20px 60px}
 header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:22px}
@@ -41,6 +41,7 @@ select{min-height:44px}
 #verse .l{border-radius:.15em}
 #verse .l.vowel{background:var(--miss-bg);color:var(--miss);box-shadow:inset 0 -.08em var(--miss)}
 #verse .l.letter{background:var(--yel-bg);color:var(--yel);box-shadow:inset 0 -.08em var(--yel)}
+#verse .l.unclear{text-decoration:underline dotted var(--soft);text-underline-offset:.25em}
 #verse .l.skip{background:var(--blue-bg);color:var(--blue);outline:.04em dashed var(--blue)}
 body.training #verse .l{cursor:pointer}
 body.training #verse .l:hover{outline:.05em solid var(--accent)}
@@ -98,7 +99,7 @@ footer{margin-top:26px;color:var(--soft);font-size:.86rem;max-width:70ch}
     <div><label for="passage">Passuk</label><select id="passage"></select></div>
     <div><label for="trad">Pronunciation</label><select id="trad"></select></div>
     <div><label for="strict">Strictness</label><select id="strict">
-      <option value="1.5">Gentle</option><option value="1" selected>Normal</option><option value="0.6">Strict</option></select></div>
+      <option value="gentle">Gentle</option><option value="normal" selected>Normal</option><option value="strict">Strict</option></select></div>
     <label class="check"><input type="checkbox" id="elokim" checked> Say Elokim (with k)</label>
   </div>
   <div id="custom-box"><label for="custom" style="font-size:.85rem;color:var(--soft)">Paste Hebrew with nikud</label>
@@ -107,7 +108,7 @@ footer{margin-top:26px;color:var(--soft);font-size:.86rem;max-width:70ch}
   <section class="stage">
     <p id="verse" dir="rtl" lang="he"></p>
     <ul class="legend"><li><i style="background:var(--good-bg)"></i>Read well</li><li><i style="background:var(--miss-bg)"></i>Nekudah</li>
-      <li><i style="background:var(--yel-bg)"></i>Letter sound</li><li><i style="background:var(--blue-bg)"></i>Skipped</li></ul>
+      <li><i style="background:var(--yel-bg)"></i>Letter sound</li><li><i style="background:var(--blue-bg)"></i>Skipped</li><li><i style="border-bottom:2px dotted var(--soft);border-radius:0"></i>Not sure</li></ul>
     <div class="rec-row">
       <button id="rec" type="button">Record</button>
       <label class="btn">Upload audio<input id="upload" type="file" accept="audio/*"></label>
@@ -150,7 +151,9 @@ footer{margin-top:26px;color:var(--soft);font-size:.86rem;max-width:70ch}
 </div>
 
 <script>
-// ===== Kriah checker core v2: per-letter / per-nekudah checking with learnable costs =====
+// ===== Kriah checker core v3 =====
+// Recognition approach adapted from the earlier Kriah Practice code: confidence-based,
+// only flags a sound when the model is sure and the neighbors match; otherwise "not sure".
 const SHEVA='\u05B0',HSEGOL='\u05B1',HPATACH='\u05B2',HKAMATZ='\u05B3',HIRIQ='\u05B4',TZEIREI='\u05B5',
   SEGOL='\u05B6',PATACH='\u05B7',KAMATZ='\u05B8',HOLAM='\u05B9',HOLAM_VAV='\u05BA',KUBUTZ='\u05BB',
   DAGESH='\u05BC',SIN_DOT='\u05C2',KAMATZ_KATAN='\u05C7';
@@ -162,17 +165,16 @@ const VNAME={[KAMATZ]:'komatz',[PATACH]:'patach',[TZEIREI]:'tzeirei',[SEGOL]:'se
 // Each pronunciation is just a table. Add a new one here.
 const TRADITIONS={
   chabad:{name:'Ashkenazi (Chabad)',tavRafe:'s',v:{[KAMATZ]:['o'],[KAMATZ_KATAN]:['o'],[HKAMATZ]:['o'],[PATACH]:['a'],[HPATACH]:['a'],
-    [TZEIREI]:['e','y'],[SEGOL]:['e'],[HSEGOL]:['e'],[HIRIQ]:['i'],[HOLAM]:['o','y'],[HOLAM_VAV]:['o','y'],[KUBUTZ]:['u'],SHURUK:['u'],[SHEVA]:['ə']}},
+    [TZEIREI]:['ey'],[SEGOL]:['e'],[HSEGOL]:['e'],[HIRIQ]:['i'],[HOLAM]:['oy'],[HOLAM_VAV]:['oy'],[KUBUTZ]:['u'],SHURUK:['u'],[SHEVA]:['ə']}},
   sefardi:{name:'Sefardi / Israeli',tavRafe:'t',v:{[KAMATZ]:['a'],[KAMATZ_KATAN]:['o'],[HKAMATZ]:['o'],[PATACH]:['a'],[HPATACH]:['a'],
     [TZEIREI]:['e'],[SEGOL]:['e'],[HSEGOL]:['e'],[HIRIQ]:['i'],[HOLAM]:['o'],[HOLAM_VAV]:['o'],[KUBUTZ]:['u'],SHURUK:['u'],[SHEVA]:['ə']}}
 };
 const BASIC={'ג':'g','ד':'d','ה':'h','ו':'v','ז':'z','ח':'x','ט':'t','י':'y','ל':'l','מ':'m','ם':'m','נ':'n','ן':'n','ס':'s','צ':'ts','ץ':'ts','ק':'k','ר':'r'};
-const SOUND_NAMES={a:'ah',e:'eh',i:'ee',o:'o',u:'oo','ə':'short uh',y:'y',x:'ch',sh:'sh',ts:'ts'};
+const VOWEL_SOUNDS=new Set(['a','o','i','e','ey','oy','u','ə']);
 
 function clusters(word){const out=[];for(const ch of word){
   if(ch>='\u05D0'&&ch<='\u05EA')out.push([ch,new Set()]);
   else if(out.length&&ch>='\u0591'&&ch<='\u05C7')out[out.length-1][1].add(ch);}return out;}
-
 function consonant(c,m,dag,T){
   if('אע'.includes(c))return[];
   if(c==='ב')return[dag?'b':'v'];
@@ -181,12 +183,14 @@ function consonant(c,m,dag,T){
   if(c==='ת')return[dag?'t':T.tavRafe];
   if(c==='ש')return[m.has(SIN_DOT)?'s':'sh'];
   return[BASIC[c]||''];}
+function splitWords(text){return text.replace(/[\u05BE\u05C3\u05C0]/g,' ').split(/\s+/).filter(w=>clusters(w).length);}
 
-// Returns sound tokens, each tied to a letter (c) and kind: 'vowel' or 'letter'.
+// Expected sounds for one word. Each: {phone, c (letter index), kind 'vowel'|'consonant', name, uncertain}
 function wordUnits(word,trad,elokim){
   const T=TRADITIONS[trad],V=T.v,cl=clusters(word),n=cl.length,letters=cl.map(x=>x[0]).join('');
   const out=[];let prev=null;
-  const add=(toks,c,kind,name)=>toks.forEach(t=>t&&out.push({t,c,kind,name}));
+  const add=(toks,c,kind,name,uncertain=false)=>toks.forEach(phone=>phone&&out.push({phone,c,kind,name,uncertain}));
+  const isName=letters.endsWith('אלהים');
   for(let i=0;i<n;i++){
     const[c,m]=cl[i],last=i===n-1,dag=m.has(DAGESH);
     let vow=null;for(const x of m)if(VOWELS.has(x)){vow=x;break;}
@@ -195,90 +199,116 @@ function wordUnits(word,trad,elokim){
       if(!vow&&dag){add(V.SHURUK,i,'vowel','shuruk');prev='SHURUK';continue;}
       if(vow===HOLAM){add(V[HOLAM],i,'vowel','cholam');prev=HOLAM;continue;}}
     if(c==='י'&&!vow&&!dag&&i>0){
-      if([PATACH,KAMATZ,HPATACH].includes(prev)&&!(nxt&&nxt[0]==='ו'&&nxt[1].size===0))
-        add(['y'],i-1,'vowel',VNAME[prev]);
+      if([PATACH,KAMATZ,HPATACH].includes(prev)&&!(nxt&&nxt[0]==='ו'&&nxt[1].size===0))add(['y'],i-1,'vowel',VNAME[prev],true);
       prev='MATER';continue;}
     if(c==='ה'&&last&&!vow&&!dag)continue;
-    let cons=consonant(c,m,dag,T);
-    if(elokim&&letters.endsWith('אלהים')&&c==='ה'&&i===n-3)cons=['k'];
-    if(last&&vow===PATACH&&'חעה'.includes(c)){add(V[PATACH],i,'vowel','patach');add(cons,i,'letter',c);prev=PATACH;continue;}
-    add(cons,i,'letter',c);
+    let cons=consonant(c,m,dag,T),consUnsure=c==='ה'||(c==='ו'&&!vow)||(c==='ש'&&!m.has(SIN_DOT)&&!m.has('\u05C1'));
+    if(isName&&c==='ה'&&i===n-3){cons=elokim?['k']:['h'];consUnsure=true;}
+    if(last&&vow===PATACH&&'חעה'.includes(c)){add(V[PATACH],i,'vowel','patach',true);add(cons,i,'consonant',c,consUnsure);prev=PATACH;continue;}
+    add(cons,i,'consonant',c,consUnsure);
     if(vow===SHEVA){
       const na=i===0||(prev===SHEVA&&!last)||(dag&&i>0&&![null,SHEVA,'MATER'].includes(prev));
-      if(na)add(V[SHEVA],i,'vowel','sheva');
+      if(na)add(V[SHEVA],i,'vowel','sheva',true);
     }else if(vow)add(V[vow],i,'vowel',VNAME[vow]);
     prev=vow;}
   return out;}
 
-function splitWords(text){return text.replace(/[\u05BE\u05C3\u05C0]/g,' ').split(/\s+/).filter(w=>clusters(w).length);}
+function buildLesson(text,trad,elokim){
+  const words=splitWords(text),units=[];
+  words.forEach((word,w)=>wordUnits(word,trad,elokim).forEach(u=>units.push({...u,w,key:w+':'+u.c+':'+u.kind})));
+  return{words,units};}
 
-const IPA_MULTI=[['ts',['ts']],['tʃ',['t','sh']],['dʒ',['d','sh']],['eɪ',['e','y']],['aɪ',['a','y']],['ɔɪ',['o','y']],
-  ['oɪ',['o','y']],['aʊ',['a','u']],['oʊ',['o']],['əʊ',['o']]];
-const IPA_ONE={};
-[['aɑæɐʌ','a'],['eɛ','e'],['əɚɜᵻ','ə'],['iɪɨy','i'],['oɔɒɵ','o'],['uʊʉ','u'],['b','b'],['vβwʋ','v'],['gɡɣ','g'],['dð','d'],
- ['hɦ','h'],['xχħ','x'],['t','t'],['θ','s'],['kqc','k'],['lɫʎ','l'],['m','m'],['nŋɲ','n'],['s','s'],['z','z'],['ʃɕʂʒ','sh'],
- ['ɹrɾʁʀɻ','r'],['j','y'],['p','p'],['f','f']].forEach(([cs,t])=>{for(const ch of cs)IPA_ONE[ch]=t;});
+// ---- Model output -> sound segments with confidence ----
+const ALIASES={a:'a ɑ ɐ æ ʌ aɪ',o:'o ɔ ɒ oʊ əʊ',i:'i ɪ ɨ',e:'e ɛ',ey:'eɪ ɛɪ',oy:'ɔɪ oɪ',u:'u ʊ','ə':'ə ɜ ᵻ',b:'b β',v:'v ʋ',
+  g:'ɡ g',d:'d',h:'h ɦ',z:'z',x:'x χ ħ',t:'t',y:'j',k:'k q',l:'l ɫ',m:'m',n:'n',s:'s',f:'f',p:'p',ts:'ts',r:'r ɹ ɾ ʁ ʀ',sh:'ʃ ɕ'};
+const NAME_BY_TOKEN=new Map();for(const[name,vals]of Object.entries(ALIASES))for(const v of vals.split(' '))NAME_BY_TOKEN.set(v,name);
+const NEAR=[['e','ey'],['o','oy'],['ə','e'],['ə','a'],['s','z'],['t','d'],['b','v'],['i','y']];
+const CLOSE=new Set(NEAR.flatMap(([a,b])=>[a+'/'+b,b+'/'+a]));
 
-function ipaToTokens(ipa){
-  const s=[...ipa.normalize('NFD')].filter(ch=>!/\p{M}/u.test(ch)&&!'ːˑˈˌʰ'.includes(ch)).join('');
-  const out=[];let i=0;
-  while(i<s.length){let hit=false;
-    for(const[k,t]of IPA_MULTI)if(s.startsWith(k,i)){out.push(...t);i+=k.length;hit=true;break;}
-    if(!hit){if(IPA_ONE[s[i]])out.push(IPA_ONE[s[i]]);i++;}}
-  return out;}
+function makeVocab(vocab){const labels=new Array(Object.keys(vocab).length);
+  for(const[tok,id]of Object.entries(vocab))labels[id]=NAME_BY_TOKEN.get(tok.replace(/[ːˑˈˌ]/gu,''));
+  return{labels,blank:vocab['<pad>']??0};}
 
-const DEFAULT_GAP={'ə':.2,'y':.6,'h':.7};
-// W = learned adjustments: { 'komatz|o>a': 0.7, 'ת|s>-': 0.5, ... }
-const keyOf=(u,h)=>u.name+'|'+u.t+'>'+(h??'-');
-function subCost(u,h,W){return u.t===h?0:(W[keyOf(u,h)]??1);}
-function delCost(u,W){return W[keyOf(u,null)]??DEFAULT_GAP[u.t]??1;}
-const insCost=h=>DEFAULT_GAP[h]??1;
+function extractSegments(output,vocab){
+  const width=output.dims[output.dims.length-1],segments=[];let last=vocab.blank,current;
+  for(let f=0;f<output.data.length/width;f++){
+    const s=output.data.subarray(f*width,f*width+width);
+    let best=vocab.blank;for(let id=0;id<width;id++)if(s[id]>s[best])best=id;
+    if(best!==last){current=undefined;const sound=vocab.labels[best];
+      if(sound){current={sound,frame:f,best:-Infinity,margin:0,supported:{}};segments.push(current);}}
+    if(current){
+      for(let id=0;id<width;id++){const nm=vocab.labels[id];if(!nm)continue;const diff=s[best]-s[id];
+        current.supported[nm]=Math.min(diff,current.supported[nm]??Infinity);}
+      if(s[best]>current.best){let other=s[vocab.blank];
+        for(let id=0;id<width;id++)if(vocab.labels[id]&&vocab.labels[id]!==current.sound)other=Math.max(other,s[id]);
+        current.best=s[best];current.margin=s[best]-other;current.frame=f;}}
+    last=best;}
+  return segments;}
 
-function align(exp,heard,W){
-  const n=exp.length,m=heard.length,D=Array.from({length:n+1},()=>new Float64Array(m+1));
-  for(let i=1;i<=n;i++)D[i][0]=D[i-1][0]+delCost(exp[i-1],W);
-  for(let i=1;i<=n;i++)for(let j=1;j<=m;j++)
-    D[i][j]=Math.min(D[i-1][j-1]+subCost(exp[i-1],heard[j-1],W),D[i-1][j]+delCost(exp[i-1],W),D[i][j-1]+insCost(heard[j-1]));
-  let j=0;for(let k=1;k<=m;k++)if(D[n][k]<D[n][j])j=k;
-  let i=n;const ops=[];const eq=(a,b)=>Math.abs(a-b)<1e-9;
-  while(i>0){
-    if(j>0&&eq(D[i][j],D[i-1][j-1]+subCost(exp[i-1],heard[j-1],W))){ops.push({e:i-1,h:heard[j-1],cost:subCost(exp[i-1],heard[j-1],W)});i--;j--;}
-    else if(eq(D[i][j],D[i-1][j]+delCost(exp[i-1],W))){ops.push({e:i-1,h:null,cost:delCost(exp[i-1],W)});i--;}
-    else{ops.push({e:null,h:heard[j-1],cost:insCost(heard[j-1])});j--;}}
-  return ops.reverse();}
+function alignment(units,segments){
+  const cols=segments.length+1,costs=new Float32Array((units.length+1)*cols),steps=new Uint8Array(costs.length);
+  const omission=u=>u.uncertain?.48:u.kind==='vowel'?.84:1.06;
+  for(let i=0;i<=units.length;i++)for(let j=0;j<cols;j++){
+    if(!i&&!j)continue;const cell=i*cols+j,u=units[i-1],h=segments[j-1];let cost=Infinity,step=0;
+    if(i&&j){const same=(u.kind==='vowel')===VOWEL_SOUNDS.has(h.sound),gap=h.supported[u.phone]??10;
+      const change=u.phone===h.sound?0:Math.min(same?1.1:2,.3+.25*gap);cost=costs[cell-cols-1]+change;step=1;}
+    const skip=i?costs[cell-cols]+omission(u):Infinity;if(skip<cost){cost=skip;step=2;}
+    const extra=j?costs[cell-1]+.83:Infinity;if(extra<cost){cost=extra;step=3;}
+    costs[cell]=cost;steps[cell]=step;}
+  const aligned=new Array(units.length).fill(null);let i=units.length,j=segments.length;
+  while(i||j){const st=steps[i*cols+j];if(st===1)aligned[--i]=segments[--j];else if(st===2)i--;else j--;}
+  return{aligned,cost:costs[costs.length-1]};}
+
+// Strictness presets: how sure the model must be before it calls something a mistake.
+const STRICT={gentle:{margin:2,gap:4},normal:{margin:1.5,gap:3.2},strict:{margin:1,gap:2.4}};
+const keyOf=(u,h)=>u.name+'|'+u.phone+'>'+(h??'-');
+
+// Returns null if the reading could not be followed; otherwise per-sound results.
+function review(output,vocab,lesson,strictness,W){
+  const S=STRICT[strictness]||STRICT.normal,units=lesson.units;
+  const heard=extractSegments(output,vocab);
+  if(!units.length||heard.length<3||heard.length>units.length*2.3+12)return null;
+  const{aligned,cost}=alignment(units,heard);
+  const exact=units.map((u,i)=>aligned[i]?.sound===u.phone);
+  if(exact.filter(Boolean).length/units.length<.48||cost/units.length>.66)return null;
+  const res=units.map((u,i)=>({...u,heard:aligned[i]?.sound??null,status:'ok'}));
+  const anchored=(a,b)=>exact.slice(Math.max(0,a),Math.min(units.length,b)).some(Boolean);
+  for(let start=0;start<units.length;){
+    const w=units[start].w;let end=start+1;while(end<units.length&&units[end].w===w)end++;
+    const bracketed=(start===0||anchored(start-3,start))&&(end===units.length||anchored(end,end+3));
+    if(end-start>=2&&bracketed&&aligned.slice(start,end).every(x=>!x)){
+      for(let k=start;k<end;k++)res[k].status='skip';start=end;continue;}
+    for(let i=start;i<end;i++){
+      const u=units[i],seg=aligned[i],r=res[i];
+      if(exact[i]){r.status='ok';continue;}
+      if(u.uncertain){r.status='unclear';continue;}
+      const local=(i===0||exact[i-1])&&(i===units.length-1||exact[i+1]);
+      const t=W[keyOf(u,seg?.sound)]||0;
+      if(t>=2){r.status='unclear';continue;}
+      if(!seg&&u.kind==='consonant'&&local){r.status='skip';continue;}
+      const close=seg&&CLOSE.has(u.phone+'/'+seg.sound);
+      const allowClose=strictness==='strict'||t<0;
+      const need=S.gap+(t>0?3*t:t*.8)+(close?1.4:0);
+      if(seg&&local&&seg.margin>=S.margin&&(seg.supported[u.phone]??10)>=Math.max(1,need)&&
+         (u.kind==='vowel')===VOWEL_SOUNDS.has(seg.sound)&&(!close||allowClose))r.status='flag';
+      else r.status='unclear';}
+    start=end;}
+  return{units:res,heard:heard.map(h=>h.sound)};}
+
+// Group sounds into letter-level units for display and training.
+const RANK={flag:3,skip:2,unclear:1,ok:0};
+function groupUnits(res){const map=new Map();
+  for(const r of res){if(!map.has(r.key))map.set(r.key,{key:r.key,w:r.w,c:r.c,kind:r.kind,name:r.name,items:[],status:'ok'});
+    const g=map.get(r.key);g.items.push(r);if(RANK[r.status]>RANK[g.status])g.status=r.status;}
+  return[...map.values()];}
 
 const show=t=>t.map(x=>({x:'ch','ə':"'"})[x]??x).join('');
 
-// Result: words[], units[] each {w,c,kind,name,expected,heard,ops,cost,flagged,type}
-function checkReading(text,ipa,trad,elokim,threshold,W){
-  const words=splitWords(text),units=new Map(),exp=[];
-  words.forEach((word,w)=>wordUnits(word,trad,elokim).forEach(u=>{
-    const key=w+':'+u.c+':'+u.kind;
-    if(!units.has(key))units.set(key,{key,w,c:u.c,kind:u.kind,name:u.name,toks:[],ops:[],cost:0});
-    units.get(key).toks.push(u.t);
-    const tok={...u,w,key};
-    if(!(exp.length&&exp[exp.length-1].t===tok.t))exp.push(tok);   // merged repeat counts as heard
-  }));
-  const heard=[];for(const h of ipaToTokens(ipa))if(heard[heard.length-1]!==h)heard.push(h);
-  for(const op of align(exp,heard,W)){if(op.e==null)continue;const u=units.get(exp[op.e].key);
-    u.ops.push({tok:exp[op.e],h:op.h,cost:op.cost});u.cost+=op.cost;}
-  const list=[...units.values()].map(u=>{
-    const flagged=u.cost>=threshold-1e-9;
-    const skipped=u.ops.length>0&&u.ops.every(o=>o.h==null);
-    return{...u,flagged,type:flagged?(skipped?'skip':u.kind):'ok',expected:show(u.toks),heard:show(u.ops.map(o=>o.h).filter(Boolean))};});
-  return{words,units:list,ipa};}
-
-// ---- Learning from teacher clicks ----
-// falseAlarm: the reading was right, so make what was heard cheaper for this exact nekudah/letter.
-// missed: the reading was wrong, so make what was heard more expensive (if it was heard differently).
-function learn(unit,decision,W){
-  const changes=[];
-  for(const o of unit.ops){
-    if(o.h===o.tok.t)continue;
-    const k=keyOf(o.tok,o.h),cur=W[k]??(o.h==null?(DEFAULT_GAP[o.tok.t]??1):1);
-    const next=decision==='falseAlarm'?Math.max(.1,cur*.7):Math.min(2,cur*1.5+.2);
-    W[k]=+next.toFixed(3);changes.push(k);}
-  return changes;}   // empty for 'missed' = the listener heard it as correct; needs real training
+// Teacher feedback. falseAlarm: forgive this exact sound swap more. missed: be stricter about it.
+function learn(group,decision,W){const changes=[];
+  for(const it of group.items){if(it.heard===it.phone)continue;const k=keyOf(it,it.heard);
+    W[k]=(W[k]||0)+(decision==='falseAlarm'?1:-1);if(W[k]===0)delete W[k];changes.push(k);}
+  return changes;}
 
 
 // ===== Page =====
@@ -295,8 +325,8 @@ const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',
 const ROOT='https://huggingface.co/Alimehdi973/wav2vec2-espeak-onnx-int8/resolve/6d4ca8853c7218ee12c0707b3ccde16310551bc3/';
 const ORT='https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/';
 const MODEL_SIZE=355431730;
-let lastBlob=null,recorder=null,chunks=[],sessionP=null,vocabInv=[],padId=0,specials=new Set();
-let lastIpa=null,result=null,selected=null,recId=null,recLabels=[];
+let lastBlob=null,recorder=null,chunks=[],sessionP=null;
+let lastOut=null,vocabInfo=null,lastIpa=null,result=null,selected=null,recId=null,recLabels=[];
 
 for(const[k,[label]]of Object.entries(PASSAGES))$('passage').add(new Option(label,k));
 for(const[k,t]of Object.entries(TRADITIONS))$('trad').add(new Option(t.name,k));
@@ -311,8 +341,8 @@ const soundLabel=s=>s==='-'?'nothing (skipped)':`"${show([s])}"`;
 function drawLearned(){
   const W=getW(),keys=Object.keys(W);
   $('learned').innerHTML=keys.length?keys.map(k=>{const[name,pair]=k.split('|');const[e,h]=pair.split('>');
-    const base=h==='-'?(DEFAULT_GAP[e]??1):1,easier=W[k]<base;
-    return `<li><b>${esc(name)}</b>: heard ${esc(soundLabel(h))} instead of ${esc(soundLabel(e))}, now ${easier?'more forgiving':'stricter'}<button class="btn" data-undo="${esc(k)}" type="button">Undo</button></li>`;}).join('')
+    const easier=W[k]>0;
+    return `<li><b>${esc(name)}</b>: heard ${esc(soundLabel(h))} instead of ${esc(soundLabel(e))}, now ${easier?'more forgiving':'stricter'} (${W[k]>0?'+':''}${W[k]})<button class="btn" data-undo="${esc(k)}" type="button">Undo</button></li>`;}).join('')
     :'<li>Nothing yet. Turn on Training mode, check a reading, then tap letters to correct it.</li>';
 }
 $('learned').onclick=e=>{const k=e.target.dataset.undo;if(!k)return;const W=getW();delete W[k];setW(W);recheck();};
@@ -351,9 +381,11 @@ $('del-train').onclick=async()=>{if(confirm('Delete all saved recordings on this
 function segments(word){const segs=[];for(const ch of word){if(ch>='\u05D0'&&ch<='\u05EA'||!segs.length)segs.push(ch);else segs[segs.length-1]+=ch;}return segs;}
 function drawVerse(){
   const words=splitWords(text());
-  const byCell=new Map();if(result)for(const u of result.units)if(u.flagged){const k=u.w+':'+u.c;const prev=byCell.get(k);
-    byCell.set(k,prev==='vowel'||u.type==='vowel'?'vowel':prev==='letter'||u.type==='letter'?'letter':'skip');}
-  const flaggedWords=new Set(result?result.units.filter(u=>u.flagged).map(u=>u.w):[]);
+  const byCell=new Map(),order=['unclear','skip','letter','vowel'];
+  if(result)for(const g of result.groups){if(g.status==='ok')continue;
+    const cls=g.status==='flag'?(g.kind==='vowel'?'vowel':'letter'):g.status;const k=g.w+':'+g.c,prev=byCell.get(k);
+    if(!prev||order.indexOf(cls)>order.indexOf(prev))byCell.set(k,cls);}
+  const flaggedWords=new Set(result?result.groups.filter(g=>g.status==='flag'||g.status==='skip').map(g=>g.w):[]);
   $('verse').replaceChildren(...words.flatMap((w,wi)=>{
     const ws=document.createElement('span');ws.className='w'+(result&&!flaggedWords.has(wi)?' ok':'');
     segments(w).forEach((seg,ci)=>{const l=document.createElement('span');l.className='l';l.textContent=seg;
@@ -362,7 +394,7 @@ function drawVerse(){
     return wi?[' ',ws]:[ws];}));
   if(!words.length)$('verse').textContent='—';
 }
-function resetResults(){result=null;lastIpa=null;selected=null;$('results').hidden=true;drawTrainer();drawVerse();}
+function resetResults(){result=null;lastIpa=null;lastOut=null;selected=null;$('results').hidden=true;drawTrainer();drawVerse();}
 $('passage').onchange=()=>{$('custom-box').style.display=$('passage').value==='custom'?'block':'none';resetResults();};
 $('custom').oninput=resetResults;
 $('trad').onchange=()=>{drawLearned();recheck();};
@@ -379,31 +411,38 @@ function drawTrainer(){
   if(!selected||!result){box.innerHTML='';$('train-help').hidden=false;return;}
   $('train-help').hidden=true;
   const seg=segments(result.words[selected.w])[selected.c];
-  const units=result.units.filter(u=>u.w===selected.w&&u.c===selected.c);
+  const units=result.groups.filter(u=>u.w===selected.w&&u.c===selected.c);
   let html=`<span class="big">${esc(seg)}</span>`;
   if(!units.length)html+='<p>This letter has no sound to check here (it is silent).</p>';
   for(const u of units){
     const what=u.kind==='vowel'?`Nekudah: <b>${esc(u.name)}</b>`:`Letter sound: <b>${esc(u.name)}</b>`;
-    const ai=u.flagged?`Checker said <b class="no" style="border:0">wrong</b>: should be "${esc(u.expected)}", heard "${esc(u.heard||'nothing')}"`
-      :`Checker said <b class="yes" style="border:0">right</b> ("${esc(u.expected)}")`;
-    const btns=u.flagged
-      ?`<button class="btn yes" data-d="falseAlarm" data-k="${esc(u.key)}" type="button">I read it right</button><button class="btn" data-d="confirmed" data-k="${esc(u.key)}" type="button">Yes, that was a mistake</button>`
-      :`<button class="btn no" data-d="missed" data-k="${esc(u.key)}" type="button">I read it wrong, it missed it</button>`;
+    const exp=show(u.items.map(i=>i.phone)),hrd=show(u.items.map(i=>i.heard).filter(Boolean))||'nothing';
+    const ai=u.status==='flag'?`Checker said <b class="no" style="border:0">wrong</b>: should be "${esc(exp)}", heard "${esc(hrd)}"`
+      :u.status==='skip'?`Checker said <b class="no" style="border:0">skipped</b> (should be "${esc(exp)}")`
+      :u.status==='unclear'?`Checker was <b>not sure</b>: should be "${esc(exp)}", heard "${esc(hrd)}"`
+      :`Checker said <b class="yes" style="border:0">right</b> ("${esc(exp)}")`;
+    const k=esc(u.key);
+    const btns=u.status==='flag'||u.status==='skip'
+      ?`<button class="btn yes" data-d="falseAlarm" data-k="${k}" type="button">I read it right</button><button class="btn" data-d="confirmed" data-k="${k}" type="button">Yes, that was a mistake</button>`
+      :u.status==='unclear'
+      ?`<button class="btn yes" data-d="correct" data-k="${k}" type="button">I read it right</button><button class="btn no" data-d="missed" data-k="${k}" type="button">I read it wrong</button>`
+      :`<button class="btn no" data-d="missed" data-k="${k}" type="button">I read it wrong, it missed it</button>`;
     html+=`<div class="row"><div class="what">${what}<br><small>${ai}</small></div>${btns}</div>`;}
   box.innerHTML=html;
 }
 $('train-letter').onclick=async e=>{
   const b=e.target.closest('button[data-d]');if(!b||!result)return;
-  const u=result.units.find(x=>x.key===b.dataset.k),d=b.dataset.d;if(!u)return;
+  const u=result.groups.find(x=>x.key===b.dataset.k),d=b.dataset.d;if(!u)return;
   let msg;
   if(d==='confirmed'){msg='Saved as a real mistake.';}
+  else if(d==='correct'){msg='Saved as read correctly.';}
   else{const W=getW();const changed=learn(u,d,W);setW(W);
     msg=d==='falseAlarm'?`Got it. ${u.name} read that way is now more forgiving.`
       :changed.length?`Got it. The checker is now stricter for ${u.name}.`
       :`Saved. The listener heard this as correct, so clicks can't fix it. Only real training can, and this recording is saved for that.`;}
   recLabels=recLabels.filter(x=>x.key!==u.key);
-  recLabels.push({key:u.key,word:u.w,letter:u.c,kind:u.kind,name:u.name,expected:u.expected,heard:u.heard,
-    checkerFlagged:u.flagged,decision:d==='falseAlarm'?'false-alarm':d});
+  recLabels.push({key:u.key,word:u.w,letter:u.c,kind:u.kind,name:u.name,expected:u.items.map(i=>i.phone),heard:u.items.map(i=>i.heard),
+    checker:u.status,decision:d==='falseAlarm'?'false-alarm':d});
   try{await saveRec();}catch{msg+=' (This browser could not save the recording.)';}
   recheck();$('train-msg').textContent=msg;
 };
@@ -446,8 +485,7 @@ function loadModel(){
   if(!sessionP)sessionP=(async()=>{
     ort.env.wasm.wasmPaths=ORT;ort.env.wasm.numThreads=1;
     const vocab=await(await fetch(ROOT+'vocab.json')).json();
-    for(const[k,v]of Object.entries(vocab)){vocabInv[v]=k;if(/^<.*>$|^\|$/.test(k))specials.add(v);}
-    padId=vocab['<pad>']??0;
+    vocabInfo=makeVocab(vocab);
     const bytes=await modelBytes();
     status('Setting up…');
     return ort.InferenceSession.create(bytes,{executionProviders:['wasm']});
@@ -458,22 +496,25 @@ function warmup(){loadModel().catch(()=>{});}
 async function toSamples(blob){
   const ctx=new(window.AudioContext||window.webkitAudioContext)();
   const audio=await ctx.decodeAudioData(await blob.arrayBuffer());ctx.close();
-  const len=Math.max(1,Math.ceil(Math.min(audio.duration,60)*16000));
+  const len=Math.max(1,Math.ceil(Math.min(audio.duration,90)*16000));
   const off=new OfflineAudioContext(1,len,16000);const src=off.createBufferSource();
   src.buffer=audio;src.connect(off.destination);src.start();
-  const x=(await off.startRendering()).getChannelData(0).slice();
-  let mean=0;for(const v of x)mean+=v;mean/=x.length;
-  let sd=0;for(const v of x)sd+=(v-mean)**2;sd=Math.sqrt(sd/x.length)+1e-7;
-  for(let i=0;i<x.length;i++)x[i]=(x[i]-mean)/sd;
-  return x;
+  return (await off.startRendering()).getChannelData(0).slice();
 }
-function decode(out){
-  const[ ,T,V]=out.dims.length===3?out.dims:[1,...out.dims];const d=out.data;const phones=[];let last=-1;
-  for(let t=0;t<T;t++){let best=0;for(let v=1;v<V;v++)if(d[t*V+v]>d[t*V+best])best=v;
-    if(best!==last&&best!==padId&&!specials.has(best))phones.push(vocabInv[best]);last=best;}
-  return phones.join(' ');
+// Runs the model in 8-second pieces with overlap, like the earlier working version.
+async function inference(session,samples){
+  const stride=320,block=16000*8,overlap=16000,chunks=[];let width,size=0;
+  for(let start=0;start<samples.length;start+=block){
+    const end=Math.min(start+block,samples.length),from=Math.max(start-overlap,0);
+    const audio=samples.subarray(from,Math.min(end+overlap,samples.length));if(audio.length<400)break;
+    const out=(await session.run({[session.inputNames[0]]:new ort.Tensor('float32',audio,[1,audio.length])}))[session.outputNames[0]];
+    width=out.dims[out.dims.length-1];
+    const first=Math.round((start-from)/stride),last=Math.min(out.data.length/width,Math.ceil((end-from)/stride));
+    const frames=out.data.subarray(first*width,last*width);chunks.push(frames);size+=frames.length;
+    if(end===samples.length)break;}
+  const data=new Float32Array(size);let o=0;for(const c of chunks){data.set(c,o);o+=c.length;}
+  return{data,dims:[size/width,width]};
 }
-
 let busy=false;
 async function check(){
   if(!lastBlob||busy)return;
@@ -485,27 +526,31 @@ async function check(){
     status('Checking the reading…');await new Promise(r=>setTimeout(r,60));
     const samples=await toSamples(lastBlob);
     if(samples.length<16000*.5){status('That recording is too short. Try again.');return;}
-    const out=await session.run({[session.inputNames[0]]:new ort.Tensor('float32',samples,[1,samples.length])});
-    lastIpa=decode(out[session.outputNames[0]]);
-    recheck();
-    status($('training').checked?'Done. Tap any letter to correct the checker.':'Done. Play the recording to hear the marked letters.');
+    lastOut=await inference(session,samples);
+    if(recheck()!==false)status($('training').checked?'Done. Tap any letter to correct the checker.':'Done. Play the recording to hear the marked letters.');
   }catch(e){console.error(e);
     status(e.message==='download'||e.message==='size'?'The speech model could not download. Check the internet connection and try again.':'That audio could not be checked. Try recording again.');}
   finally{busy=false;$('rec').disabled=false;$('again').disabled=false;}
 }
-// Re-score from the saved sounds: instant, no need to run the model again.
+// Re-score from the saved model output: instant, no need to run the model again.
 function recheck(){
-  if(lastIpa==null){drawVerse();return;}
-  result=checkReading(text(),lastIpa,$('trad').value,$('elokim').checked,+$('strict').value,getW());
+  if(!lastOut){drawVerse();return;}
+  const lesson=buildLesson(text(),$('trad').value,$('elokim').checked);
+  const r=review(lastOut,vocabInfo,lesson,$('strict').value,getW());
+  if(!r){result=null;drawVerse();drawTrainer();$('results').hidden=true;
+    status('Could not follow this reading. Check the right passuk is chosen, read clearly near the microphone, and try again.');return false;}
+  result={words:lesson.words,groups:groupUnits(r.units)};lastIpa=show(r.heard);
   drawVerse();drawTrainer();
-  const bad=result.units.filter(u=>u.flagged),badWords=new Set(bad.map(u=>u.w)).size,n=result.words.length;
-  $('summary').textContent=bad.length?`${n-badWords} of ${n} words read well.`:`All ${n} words read well.`;
-  $('notes').innerHTML=bad.map(u=>{const seg=segments(result.words[u.w])[u.c];
-    const t=u.type==='skip'?`${u.kind==='vowel'?u.name:'letter sound'} may be skipped (should be "${u.expected}")`
-      :`${u.kind==='vowel'?u.name:'letter sound'}: should be "${u.expected}", heard "${u.heard}"`;
+  const bad=result.groups.filter(g=>g.status==='flag'||g.status==='skip'),unsure=result.groups.filter(g=>g.status==='unclear').length;
+  const badWords=new Set(bad.map(g=>g.w)).size,n=result.words.length;
+  $('summary').textContent=(bad.length?`${n-badWords} of ${n} words read well.`:`No mistakes found.`)+(unsure?` ${unsure} sound${unsure>1?'s':''} unclear (dotted): listen yourself.`:'');
+  $('notes').innerHTML=bad.map(g=>{const seg=segments(result.words[g.w])[g.c];
+    const exp=show(g.items.map(i=>i.phone)),hrd=show(g.items.map(i=>i.heard).filter(Boolean));
+    const what=g.kind==='vowel'?g.name:'letter sound';
+    const t=g.status==='skip'?`${what} may be skipped (should be "${exp}")`:`${what}: should be "${exp}", heard "${hrd}"`;
     return `<li><b dir="rtl">${esc(seg)}</b> ${esc(t)}</li>`;}).join('');
   $('raw').textContent=lastIpa||'(nothing)';
-  $('results').hidden=false;
+  $('results').hidden=false;return true;
 }
 drawVerse();drawLearned();countRecs();
 </script>
