@@ -237,8 +237,8 @@ function extractSegments(output,vocab){
     const s=output.data.subarray(f*width,f*width+width);
     let best=vocab.blank;for(let id=0;id<width;id++)if(s[id]>s[best])best=id;
     if(best!==last){current=undefined;const sound=vocab.labels[best];
-      if(sound){current={sound,frame:f,best:-Infinity,margin:0,supported:{}};segments.push(current);}}
-    if(current){
+      if(sound){current={sound,frame:f,start:f,end:f,best:-Infinity,margin:0,supported:{}};segments.push(current);}}
+    if(current){current.end=f;
       for(let id=0;id<width;id++){const nm=vocab.labels[id];if(!nm)continue;const diff=s[best]-s[id];
         current.supported[nm]=Math.min(diff,current.supported[nm]??Infinity);}
       if(s[best]>current.best){let other=s[vocab.blank];
@@ -284,6 +284,8 @@ function review(output,vocab,lesson,strictness,W){
       for(let k=start;k<end;k++)res[k].status='skip';start=end;continue;}
     for(let i=start;i<end;i++){
       const u=units[i],seg=aligned[i],r=res[i];
+      // Sounds trained in the Sound trainer are judged by the teacher's own examples first.
+      if(seg&&!u.uncertain&&window.soundJudge){const j=window.soundJudge(output,seg,u);if(j){r.status=j.status;if(j.heard)r.heard=j.heard;continue;}}
       if(exact[i]){r.status='ok';continue;}
       if(low){r.status='unclear';continue;}
       if(u.uncertain){r.status='unclear';continue;}
@@ -561,5 +563,6 @@ function recheck(){
 }
 drawVerse();drawLearned();countRecs();
 </script>
+<script src="sounds.js"></script>
 </body>
 </html>
