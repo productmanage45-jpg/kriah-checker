@@ -1,0 +1,380 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kriah Testing</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@500;700&family=Rubik:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/ort.min.js"></script>
+<style>
+:root{--paper:#f3f6f1;--card:#fff;--ink:#1f2a24;--soft:#5b6b62;--line:#d8e0d9;--accent:#24577a;--accent-ink:#fff;
+  --good:#2f7d52;--good-bg:#dcefe3;--miss:#b8441a;--miss-bg:#fbe1d3;--yel:#7a5600;--yel-bg:#ffe58f;--blue:#1d4fa3;--blue-bg:#dbe8ff;color-scheme:light}
+@media (prefers-color-scheme:dark){:root{--paper:#141a17;--card:#1c2420;--ink:#e6ece8;--soft:#9fb0a6;--line:#2f3a34;--accent:#7db4dc;--accent-ink:#0d1a24;
+  --good:#7fd1a0;--good-bg:#1f3a2b;--miss:#ff9b72;--miss-bg:#45261a;--yel:#ffd772;--yel-bg:#433715;--blue:#9cc3ff;--blue-bg:#1b2c4a;color-scheme:dark}}
+*{box-sizing:border-box}[hidden]{display:none!important}
+body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.5 Rubik,system-ui,sans-serif}
+.wrap{max-width:1000px;margin:0 auto;padding:18px 18px 60px}
+header{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+header h1{font-size:1.25rem;margin:0 auto 0 0}
+nav{display:flex;gap:6px;flex-wrap:wrap}
+.btn{font:500 .95rem Rubik,sans-serif;color:var(--accent);background:var(--card);border:1px solid var(--line);border-radius:10px;padding:9px 14px;cursor:pointer}
+.btn.on,.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.no{color:var(--miss);border-color:var(--miss)}
+button:disabled{opacity:.5;cursor:wait}:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:18px;margin-bottom:14px}
+label.f{display:block;font-size:.85rem;color:var(--soft);font-weight:500;margin-bottom:3px}
+select,input,textarea{font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:10px;padding:9px 11px;min-height:44px;max-width:100%}
+textarea{width:100%}
+.row{display:flex;gap:10px 14px;flex-wrap:wrap;align-items:end}
+.muted{color:var(--soft);font-size:.9rem}
+#msg{min-height:1.4em;color:var(--accent);font-weight:500}
+/* Passuk with tappable letters */
+.verse{direction:rtl;text-align:center;font:700 clamp(2.4rem,7vw,4rem)/1.9 'Frank Ruhl Libre','Times New Roman',serif;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;touch-action:manipulation;margin:6px 0}
+.verse .w{display:inline-block;white-space:nowrap;margin:0 .14em}
+.verse .L{display:inline-block;position:relative;padding:.08em .02em;border-radius:.14em;cursor:pointer;line-height:1.35}
+.verse .L:hover{background:color-mix(in srgb,var(--accent) 10%,transparent)}
+.verse .L.letter{background:var(--yel-bg);color:var(--yel)}
+.verse .L.nikud{color:var(--miss);box-shadow:inset 0 -.12em var(--miss)}
+.verse .L.letter.nikud{background:var(--yel-bg)}
+.verse .L.missing{background:var(--blue-bg);color:var(--blue);outline:.05em dashed var(--blue)}
+.verse .L.hold{outline:.06em solid var(--accent)}
+.verse .L.ai-letter::after,.verse .L.ai-nikud::after,.verse .L.ai-missing::after{content:"";position:absolute;left:10%;right:10%;height:.09em;border-radius:1em}
+.verse .L.ai-letter::after{top:0;background:var(--yel)}.verse .L.ai-nikud::after{bottom:0;background:var(--miss)}.verse .L.ai-missing::after{top:45%;background:var(--blue)}
+.legend{display:flex;justify-content:center;flex-wrap:wrap;gap:6px 18px;font-size:.88rem;color:var(--soft);list-style:none;padding:0;margin:0 0 10px}
+.legend i{display:inline-block;width:.85em;height:.85em;border-radius:3px;margin-right:6px;vertical-align:-.05em}
+.rec-row{display:flex;justify-content:center;align-items:center;gap:12px;flex-wrap:wrap;margin-top:8px}
+#rec{width:88px;height:88px;border-radius:50%;border:0;background:var(--accent);color:var(--accent-ink);font:600 1rem Rubik,sans-serif;cursor:pointer}
+#rec.on{background:var(--miss)}
+#timer{font-variant-numeric:tabular-nums;color:var(--soft);min-width:4ch}
+audio{display:block;margin:12px auto 0;width:min(100%,460px)}
+table{width:100%;border-collapse:collapse;font-size:.95rem}
+th{text-align:left;font-weight:500;color:var(--soft);font-size:.85rem;padding:6px;border-bottom:1px solid var(--line)}
+td{padding:7px 6px;border-bottom:1px solid var(--line)}
+tr.click{cursor:pointer}tr.click:hover td{background:color-mix(in srgb,var(--accent) 7%,transparent)}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
+.stat{border:1px solid var(--line);border-radius:12px;padding:10px}.stat b{display:block;font-size:1.4rem}
+progress{width:min(100%,360px);accent-color:var(--accent)}
+.scroll{overflow-x:auto}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>Kriah Testing</h1>
+  <nav id="nav" hidden>
+    <button class="btn on" data-view="test" type="button">Test</button>
+    <button class="btn" data-view="review" type="button">Review</button>
+    <button class="btn" data-view="classes" type="button">Classes</button>
+    <button class="btn" id="signout" type="button">Sign out</button>
+  </nav>
+</header>
+<p id="msg" role="status" aria-live="polite"></p>
+
+<!-- Setup needed -->
+<section id="v-setup" class="card" hidden>
+  <h2>Almost ready</h2>
+  <p>This page needs the school's Supabase project. Put the Project URL and anon key at the top of the script in school.html.</p>
+</section>
+
+<!-- Login -->
+<section id="v-login" class="card" hidden>
+  <h2>Teacher sign in</h2>
+  <div class="row">
+    <div><label class="f" for="email">Email</label><input id="email" type="email" autocomplete="username"></div>
+    <div><label class="f" for="pass">Password</label><input id="pass" type="password" autocomplete="current-password"></div>
+    <button class="btn primary" id="login" type="button">Sign in</button>
+  </div>
+</section>
+
+<!-- Test -->
+<section id="v-test" hidden>
+  <div class="card">
+    <div class="row">
+      <div><label class="f" for="t-class">Class</label><select id="t-class"></select></div>
+      <div><label class="f" for="t-student">Student</label><select id="t-student"></select></div>
+      <div><label class="f" for="t-passage">Passage</label><select id="t-passage"></select></div>
+    </div>
+    <div id="t-custom-box" hidden style="margin-top:10px"><label class="f" for="t-custom">Hebrew with nikud</label>
+      <textarea id="t-custom" dir="rtl" lang="he" rows="2" style="font:500 1.4rem 'Frank Ruhl Libre',serif"></textarea></div>
+  </div>
+  <div class="card">
+    <ul class="legend">
+      <li><i style="background:var(--yel-bg)"></i>Tap top of letter: letter mistake</li>
+      <li><i style="background:var(--miss-bg)"></i>Tap bottom: nikud mistake</li>
+      <li><i style="background:var(--blue-bg)"></i>Press and hold: letter missing</li>
+      <li>Tap again to remove</li>
+    </ul>
+    <div id="t-verse" class="verse" lang="he"></div>
+    <div class="rec-row">
+      <button id="rec" type="button">Record</button><span id="timer"></span>
+      <button class="btn" id="t-clear" type="button">Clear marks</button>
+    </div>
+    <audio id="t-play" controls hidden></audio>
+    <div class="rec-row">
+      <button class="btn primary" id="t-save" type="button" disabled>Save test</button>
+      <button class="btn" id="t-next" type="button">Next student</button>
+    </div>
+    <p class="muted" style="text-align:center" id="t-count"></p>
+  </div>
+</section>
+
+<!-- Review -->
+<section id="v-review" hidden>
+  <div class="card">
+    <div class="row">
+      <div><label class="f" for="r-class">Class</label><select id="r-class"></select></div>
+      <div><label class="f" for="r-student">Student</label><select id="r-student"></select></div>
+      <button class="btn" id="r-load" type="button">Show tests</button>
+      <button class="btn" id="r-ai" type="button">Run AI on unchecked tests</button>
+    </div>
+    <progress id="r-prog" max="100" hidden></progress>
+    <p class="muted" id="r-ai-note">The AI check runs on this computer only (first time downloads 355 MB). Teachers never see AI marks while testing.</p>
+  </div>
+  <div class="card" id="r-stats-box" hidden><h2 style="margin-top:0;font-size:1.05rem">Teacher vs AI (all AI-checked tests shown)</h2><div class="stats" id="r-stats"></div></div>
+  <div class="card scroll"><table id="r-table"></table></div>
+  <div class="card" id="r-detail" hidden>
+    <h2 id="r-title" style="margin-top:0;font-size:1.1rem"></h2>
+    <audio id="r-play" controls></audio>
+    <label style="display:flex;gap:8px;align-items:center;justify-content:center;margin:10px 0"><input type="checkbox" id="r-showai" style="min-height:0;width:20px;height:20px"> Show AI marks (thin lines)</label>
+    <div id="r-verse" class="verse" lang="he"></div>
+    <p class="muted" id="r-compare" style="text-align:center"></p>
+    <div class="rec-row"><button class="btn primary" id="r-save" type="button">Save changes to teacher marks</button><button class="btn no" id="r-del" type="button">Delete test</button></div>
+  </div>
+</section>
+
+<!-- Classes -->
+<section id="v-classes" hidden>
+  <div class="card">
+    <h2 style="margin-top:0;font-size:1.05rem">Add students</h2>
+    <p class="muted">Paste one student per line as: <b>Class, Student name</b>. New classes are created automatically.</p>
+    <textarea id="c-paste" rows="6" placeholder="Grade 2A, Moshe K.&#10;Grade 2A, Levi S."></textarea>
+    <div class="rec-row" style="justify-content:flex-start"><button class="btn primary" id="c-import" type="button">Add students</button></div>
+  </div>
+  <div class="card scroll"><table id="c-table"></table></div>
+</section>
+</div>
+
+<script src="core.js"></script>
+<script>
+// ===== School settings: fill these in from Supabase > Project Settings > API =====
+const SUPABASE_URL='YOUR_SUPABASE_URL';
+const SUPABASE_ANON_KEY='YOUR_SUPABASE_ANON_KEY';
+
+const PASSAGES={
+  'b1':['Bereishis 1:1','בְּרֵאשִׁית בָּרָא אֱלֹהִים אֵת הַשָּׁמַיִם וְאֵת הָאָרֶץ'],
+  'b2':['Bereishis 1:2','וְהָאָרֶץ הָיְתָה תֹהוּ וָבֹהוּ וְחֹשֶׁךְ עַל פְּנֵי תְהוֹם וְרוּחַ אֱלֹהִים מְרַחֶפֶת עַל פְּנֵי הַמָּיִם'],
+  'b3':['Bereishis 1:3','וַיֹּאמֶר אֱלֹהִים יְהִי אוֹר וַיְהִי אוֹר'],
+  'b4':['Bereishis 1:4','וַיַּרְא אֱלֹהִים אֶת הָאוֹר כִּי טוֹב וַיַּבְדֵּל אֱלֹהִים בֵּין הָאוֹר וּבֵין הַחֹשֶׁךְ'],
+  'b5':['Bereishis 1:5','וַיִּקְרָא אֱלֹהִים לָאוֹר יוֹם וְלַחֹשֶׁךְ קָרָא לָיְלָה וַיְהִי עֶרֶב וַיְהִי בֹקֶר יוֹם אֶחָד'],
+  't23':['Tehillim 23:2–3','בִּנְאוֹת דֶּשֶׁא יַרְבִּיצֵנִי עַל מֵי מְנֻחוֹת יְנַהֲלֵנִי נַפְשִׁי יְשׁוֹבֵב יַנְחֵנִי בְמַעְגְּלֵי צֶדֶק לְמַעַן שְׁמוֹ'],
+  'custom':['My own passage','']
+};
+const AI_VERSION='checker-v3';
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]);
+const msg=t=>$('msg').textContent=t||'';
+let sb=null,classes=[],students=[];
+
+// ===== Letters =====
+function segments(word){const s=[];for(const ch of word){if(ch>='\u05D0'&&ch<='\u05EA'||!s.length)s.push(ch);else s[s.length-1]+=ch;}return s;}
+// marks: Set of "w:c:type", type = letter | nikud | missing
+function drawVerse(el,text,marks,aiMarks){
+  const words=splitWords(text);
+  el.replaceChildren(...words.flatMap((w,wi)=>{const ws=document.createElement('span');ws.className='w';
+    segments(w).forEach((seg,ci)=>{const l=document.createElement('span');l.className='L';l.textContent=seg;l.dataset.w=wi;l.dataset.c=ci;
+      for(const t of['letter','nikud','missing']){if(marks.has(`${wi}:${ci}:${t}`))l.classList.add(t);if(aiMarks&&aiMarks.has(`${wi}:${ci}:${t}`))l.classList.add('ai-'+t);}
+      ws.append(l);});return wi?[' ',ws]:[ws];}));
+  if(!words.length)el.textContent='—';
+}
+function toggle(marks,key){if(marks.has(key))marks.delete(key);else marks.add(key);}
+// Tap top = letter mistake, tap bottom = nikud mistake, press and hold = letter missing.
+function enableMarking(el,getMarks,onChange){
+  let timer=null,held=false,target=null;
+  el.addEventListener('contextmenu',e=>e.preventDefault());
+  el.addEventListener('pointerdown',e=>{const l=e.target.closest('.L');if(!l)return;target=l;held=false;l.classList.add('hold');
+    timer=setTimeout(()=>{held=true;const m=getMarks(),base=`${l.dataset.w}:${l.dataset.c}:`;
+      const had=m.has(base+'missing');['letter','nikud','missing'].forEach(t=>m.delete(base+t));if(!had)m.add(base+'missing');
+      navigator.vibrate?.(30);onChange();},550);});
+  const end=e=>{clearTimeout(timer);const l=target;target=null;if(!l)return;l.classList.remove('hold');
+    if(held||e.type!=='pointerup')return;const r=l.getBoundingClientRect(),top=e.clientY<r.top+r.height/2;
+    const m=getMarks(),base=`${l.dataset.w}:${l.dataset.c}:`;m.delete(base+'missing');toggle(m,base+(top?'letter':'nikud'));onChange();};
+  el.addEventListener('pointerup',end);el.addEventListener('pointercancel',end);
+}
+const marksToList=m=>[...m].map(k=>{const[w,c,type]=k.split(':');return{w:+w,c:+c,type};});
+const listToMarks=l=>new Set((l||[]).map(x=>`${x.w}:${x.c}:${x.type}`));
+
+// ===== Startup and login =====
+function showView(view){for(const v of['setup','login','test','review','classes'])$('v-'+v).hidden=v!==view;
+  document.querySelectorAll('#nav [data-view]').forEach(b=>b.classList.toggle('on',b.dataset.view===view));}
+async function start(){
+  for(const[k,[t]]of Object.entries(PASSAGES))$('t-passage').add(new Option(t,k));
+  if(SUPABASE_URL.startsWith('YOUR')){showView('setup');return;}
+  sb=supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
+  const{data}=await sb.auth.getSession();
+  if(data.session)enter();else showView('login');
+}
+$('login').onclick=async()=>{msg('Signing in…');
+  const{error}=await sb.auth.signInWithPassword({email:$('email').value.trim(),password:$('pass').value});
+  if(error){msg('Sign in failed: check the email and password.');return;}$('pass').value='';enter();};
+$('pass').onkeydown=e=>{if(e.key==='Enter')$('login').click();};
+$('signout').onclick=async()=>{await sb.auth.signOut();$('nav').hidden=true;showView('login');msg('Signed out.');};
+document.querySelectorAll('#nav [data-view]').forEach(b=>b.onclick=()=>{showView(b.dataset.view);msg('');
+  if(b.dataset.view==='review')loadTests();if(b.dataset.view==='classes')drawClasses();});
+async function enter(){$('nav').hidden=false;msg('');await loadRoster();showView('test');drawTest();}
+
+async function loadRoster(){
+  const c=await sb.from('classes').select('*').order('name');const s=await sb.from('students').select('*').eq('active',true).order('name');
+  if(c.error||s.error){msg('Could not load classes. Check the database setup.');return;}
+  classes=c.data;students=s.data;
+  for(const id of['t-class','r-class']){const el=$(id),keep=el.value;el.innerHTML=(id==='r-class'?'<option value="">All classes</option>':'')+classes.map(x=>`<option value="${x.id}">${esc(x.name)}</option>`).join('');if(keep)el.value=keep;}
+  fillStudents('t-class','t-student',false);fillStudents('r-class','r-student',true);
+}
+function fillStudents(classSel,studentSel,all){const cid=$(classSel).value,el=$(studentSel),keep=el.value;
+  const list=students.filter(s=>!cid||s.class_id===cid);
+  el.innerHTML=(all?'<option value="">All students</option>':'')+list.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('');
+  if(keep&&list.some(s=>s.id===keep))el.value=keep;}
+$('t-class').onchange=()=>fillStudents('t-class','t-student',false);
+$('r-class').onchange=()=>fillStudents('r-class','r-student',true);
+
+// ===== Testing =====
+let tMarks=new Set(),blob=null,recorder=null,chunks=[],recStart=0,tick=null,saving=false;
+const passageText=()=>$('t-passage').value==='custom'?$('t-custom').value.trim():PASSAGES[$('t-passage').value][1];
+const passageTitle=()=>$('t-passage').value==='custom'?'Custom passage':PASSAGES[$('t-passage').value][0];
+function drawTest(){drawVerse($('t-verse'),passageText(),tMarks);updateSave();
+  $('t-count').textContent=tMarks.size?`${tMarks.size} mark${tMarks.size>1?'s':''}`:'No mistakes marked';}
+function updateSave(){$('t-save').disabled=saving||!blob||!$('t-student').value||!passageText();}
+enableMarking($('t-verse'),()=>tMarks,drawTest);
+$('t-passage').onchange=()=>{$('t-custom-box').hidden=$('t-passage').value!=='custom';tMarks.clear();drawTest();};
+$('t-custom').oninput=()=>{tMarks.clear();drawTest();};
+$('t-student').onchange=updateSave;
+$('t-clear').onclick=()=>{tMarks.clear();drawTest();};
+$('rec').onclick=async()=>{
+  if(recorder&&recorder.state==='recording'){recorder.stop();return;}
+  try{const stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true}});
+    chunks=[];recorder=new MediaRecorder(stream);recorder.ondataavailable=e=>e.data.size&&chunks.push(e.data);
+    recorder.onstop=()=>{stream.getTracks().forEach(t=>t.stop());clearInterval(tick);$('rec').classList.remove('on');$('rec').textContent='Record again';
+      blob=new Blob(chunks,{type:recorder.mimeType});blob.duration=(Date.now()-recStart)/1000;$('t-play').src=URL.createObjectURL(blob);$('t-play').hidden=false;updateSave();msg('Recording ready. Check the marks, then Save test.');};
+    recorder.start();recStart=Date.now();$('rec').classList.add('on');$('rec').textContent='Stop';blob=null;updateSave();
+    tick=setInterval(()=>{const s=Math.floor((Date.now()-recStart)/1000);$('timer').textContent=`${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;},250);
+    msg('Recording… mark mistakes as the student reads.');
+  }catch{msg('The microphone is blocked. Allow it in the browser settings.');}
+};
+$('t-save').onclick=async()=>{
+  if(!blob)return;saving=true;updateSave();msg('Saving…');
+  try{const id=crypto.randomUUID(),ext=/mp4|aac/.test(blob.type)?'m4a':/ogg/.test(blob.type)?'ogg':'webm',path=`${id}.${ext}`;
+    const up=await sb.storage.from('recordings').upload(path,blob,{contentType:blob.type||'audio/webm'});if(up.error)throw up.error;
+    const{data:u}=await sb.auth.getUser();
+    const ins=await sb.from('tests').insert({id,student_id:$('t-student').value,class_id:$('t-class').value,teacher_email:u.user?.email,
+      passage_title:passageTitle(),passage_text:passageText(),audio_path:path,audio_type:blob.type,duration:blob.duration,teacher_marks:marksToList(tMarks)});
+    if(ins.error)throw ins.error;
+    msg(`Saved ✓ ${$('t-student').selectedOptions[0].text}`);nextStudent();
+  }catch(e){console.error(e);msg('Could not save. Check the internet connection and try again.');}
+  finally{saving=false;updateSave();}
+};
+function nextStudent(){tMarks.clear();blob=null;$('t-play').hidden=true;$('timer').textContent='';$('rec').textContent='Record';
+  const el=$('t-student');if(el.selectedIndex<el.options.length-1)el.selectedIndex++;drawTest();}
+$('t-next').onclick=()=>{nextStudent();msg('');};
+
+// ===== Classes =====
+async function drawClasses(){await loadRoster();
+  $('c-table').innerHTML='<tr><th>Class</th><th>Students</th></tr>'+classes.map(c=>{const list=students.filter(s=>s.class_id===c.id);
+    return `<tr><td><b>${esc(c.name)}</b></td><td>${list.map(s=>`${esc(s.name)} <button class="btn" style="padding:2px 8px;font-size:.8rem" data-rm="${s.id}" type="button">remove</button>`).join(' · ')||'—'}</td></tr>`;}).join('');}
+$('c-table').onclick=async e=>{const id=e.target.dataset.rm;if(!id)return;if(!confirm('Remove this student from the list? Saved tests stay.'))return;
+  await sb.from('students').update({active:false}).eq('id',id);drawClasses();};
+$('c-import').onclick=async()=>{
+  const lines=$('c-paste').value.split('\n').map(l=>l.split(/[,\t]/).map(x=>x.trim())).filter(p=>p.length>=2&&p[0]&&p[1]);
+  if(!lines.length){msg('Paste lines like: Grade 2A, Moshe K.');return;}
+  msg('Adding…');
+  for(const name of new Set(lines.map(p=>p[0])))if(!classes.some(c=>c.name===name)){const r=await sb.from('classes').insert({name}).select().single();if(!r.error)classes.push(r.data);}
+  const rows=lines.map(([cls,name])=>({class_id:classes.find(c=>c.name===cls)?.id,name})).filter(r=>r.class_id&&!students.some(s=>s.class_id===r.class_id&&s.name===r.name));
+  if(rows.length){const r=await sb.from('students').insert(rows);if(r.error){msg('Could not add students.');return;}}
+  $('c-paste').value='';msg(`Added ${rows.length} student${rows.length===1?'':'s'}.`);drawClasses();
+};
+
+// ===== Review =====
+let tests=[],current=null,rMarks=new Set();
+async function loadTests(){
+  let q=sb.from('tests').select('*').order('created_at',{ascending:false}).limit(500);
+  if($('r-class').value)q=q.eq('class_id',$('r-class').value);if($('r-student').value)q=q.eq('student_id',$('r-student').value);
+  const r=await q;if(r.error){msg('Could not load tests.');return;}tests=r.data;
+  const name=id=>students.find(s=>s.id===id)?.name||'(removed)';
+  $('r-table').innerHTML='<tr><th>Date</th><th>Student</th><th>Passage</th><th>Teacher marks</th><th>AI agreement</th></tr>'+tests.map(t=>{
+    const c=t.ai_marks?compare(listToMarks(t.teacher_marks),listToMarks(t.ai_marks)):null;
+    return `<tr class="click" data-id="${t.id}"><td>${new Date(t.created_at).toLocaleString()}</td><td>${esc(name(t.student_id))}</td><td>${esc(t.passage_title)}</td><td>${(t.teacher_marks||[]).length}</td><td>${c?`${c.agree} agree · ${c.missed} missed · ${c.extra} false`:'not checked'}</td></tr>`;}).join('');
+  drawStats();
+}
+$('r-load').onclick=loadTests;
+function compare(T,A){let agree=0,missed=0,extra=0;for(const k of T)A.has(k)?agree++:missed++;for(const k of A)if(!T.has(k))extra++;return{agree,missed,extra};}
+function drawStats(){const done=tests.filter(t=>t.ai_marks);$('r-stats-box').hidden=!done.length;if(!done.length)return;
+  const by={letter:{a:0,m:0,e:0},nikud:{a:0,m:0,e:0},missing:{a:0,m:0,e:0}};
+  for(const t of done){const T=listToMarks(t.teacher_marks),A=listToMarks(t.ai_marks);
+    for(const k of T){const ty=k.split(':')[2];A.has(k)?by[ty].a++:by[ty].m++;}for(const k of A)if(!T.has(k))by[k.split(':')[2]].e++;}
+  const names={nikud:'Nikud',letter:'Letter',missing:'Missing'};
+  $('r-stats').innerHTML=`<div class="stat"><b>${done.length}</b>tests compared</div>`+Object.entries(by).map(([k,v])=>
+    `<div class="stat"><b>${v.a}/${v.a+v.m}</b>${names[k]} mistakes the AI caught<br><span class="muted">${v.e} false alarms</span></div>`).join('');}
+$('r-table').onclick=async e=>{const tr=e.target.closest('tr[data-id]');if(!tr)return;current=tests.find(t=>t.id===tr.dataset.id);
+  rMarks=listToMarks(current.teacher_marks);$('r-detail').hidden=false;
+  $('r-title').textContent=`${students.find(s=>s.id===current.student_id)?.name||''} · ${current.passage_title} · ${new Date(current.created_at).toLocaleDateString()}`;
+  const u=await sb.storage.from('recordings').createSignedUrl(current.audio_path,3600);$('r-play').src=u.data?.signedUrl||'';
+  drawReview();$('r-detail').scrollIntoView({behavior:'smooth'});};
+function drawReview(){const ai=$('r-showai').checked&&current.ai_marks?listToMarks(current.ai_marks):null;
+  drawVerse($('r-verse'),current.passage_text,rMarks,ai);
+  const c=current.ai_marks?compare(rMarks,listToMarks(current.ai_marks)):null;
+  $('r-compare').textContent=c?`AI: ${c.agree} agree, ${c.missed} missed, ${c.extra} false alarms${current.ai_unclear?`, ${current.ai_unclear} unsure`:''}.`:'Not AI-checked yet.';}
+enableMarking($('r-verse'),()=>rMarks,drawReview);
+$('r-showai').onchange=()=>current&&drawReview();
+$('r-save').onclick=async()=>{const r=await sb.from('tests').update({teacher_marks:marksToList(rMarks)}).eq('id',current.id);
+  msg(r.error?'Could not save changes.':'Teacher marks updated ✓');if(!r.error){current.teacher_marks=marksToList(rMarks);loadTests();}};
+$('r-del').onclick=async()=>{if(!confirm('Delete this test and its recording? This cannot be undone.'))return;
+  await sb.storage.from('recordings').remove([current.audio_path]);await sb.from('tests').delete().eq('id',current.id);
+  $('r-detail').hidden=true;msg('Deleted.');loadTests();};
+
+// ===== Hidden AI check (runs on the reviewer's computer) =====
+const ROOT='https://huggingface.co/Alimehdi973/wav2vec2-espeak-onnx-int8/resolve/6d4ca8853c7218ee12c0707b3ccde16310551bc3/';
+const ORT='https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/';
+const MODEL_SIZE=355431730;let sessionP=null,vocabInfo=null;
+async function modelBytes(){const url=ROOT+'phonemes.onnx';let cache=null;
+  try{cache=await caches.open('kriah-model-v1');const hit=await cache.match(url);if(hit)return new Uint8Array(await hit.arrayBuffer());}catch{}
+  const res=await fetch(url);if(!res.ok||!res.body)throw new Error('download');
+  const bytes=new Uint8Array(MODEL_SIZE);let got=0;const reader=res.body.getReader();$('r-prog').hidden=false;
+  for(;;){const{done,value}=await reader.read();if(done)break;bytes.set(value,got);got+=value.length;$('r-prog').value=got/MODEL_SIZE*100;msg(`Downloading the speech model (first time only)… ${Math.floor(got/MODEL_SIZE*100)}%`);}
+  $('r-prog').hidden=true;if(got!==MODEL_SIZE)throw new Error('download');try{await cache?.put(url,new Response(new Blob([bytes])));}catch{}return bytes;}
+function loadModel(){if(!sessionP)sessionP=(async()=>{ort.env.wasm.wasmPaths=ORT;ort.env.wasm.numThreads=1;
+  vocabInfo=makeVocab(await(await fetch(ROOT+'vocab.json')).json());const bytes=await modelBytes();msg('Setting up…');
+  return ort.InferenceSession.create(bytes,{executionProviders:['wasm']});})().catch(e=>{sessionP=null;throw e;});return sessionP;}
+async function toSamples(b){const ctx=new(window.AudioContext||window.webkitAudioContext)();const audio=await ctx.decodeAudioData(await b.arrayBuffer());ctx.close();
+  const len=Math.max(1,Math.ceil(Math.min(audio.duration,120)*16000)),off=new OfflineAudioContext(1,len,16000),src=off.createBufferSource();
+  src.buffer=audio;src.connect(off.destination);src.start();return(await off.startRendering()).getChannelData(0).slice();}
+async function inference(session,samples){const stride=320,block=16000*8,overlap=16000,chunks=[];let width,size=0;
+  for(let start=0;start<samples.length;start+=block){const end=Math.min(start+block,samples.length),from=Math.max(start-overlap,0);
+    const audio=samples.subarray(from,Math.min(end+overlap,samples.length));if(audio.length<400)break;
+    const out=(await session.run({[session.inputNames[0]]:new ort.Tensor('float32',audio,[1,audio.length])}))[session.outputNames[0]];
+    width=out.dims[out.dims.length-1];const first=Math.round((start-from)/stride),last=Math.min(out.data.length/width,Math.ceil((end-from)/stride));
+    const f=out.data.subarray(first*width,last*width);chunks.push(f);size+=f.length;if(end===samples.length)break;}
+  const data=new Float32Array(size);let o=0;for(const c of chunks){data.set(c,o);o+=c.length;}return{data,dims:[size/width,width]};}
+$('r-ai').onclick=async()=>{
+  const todo=tests.filter(t=>!t.ai_marks);if(!todo.length){msg('All tests shown are already AI-checked. Click Show tests to refresh.');return;}
+  $('r-ai').disabled=true;
+  try{const session=await loadModel();let n=0;
+    for(const t of todo){n++;msg(`AI checking ${n} of ${todo.length}…`);
+      const dl=await sb.storage.from('recordings').download(t.audio_path);if(dl.error)continue;
+      const out=await inference(session,await toSamples(dl.data));
+      const lesson=buildLesson(t.passage_text,t.pronunciation||'chabad',true);
+      const r=review(out,vocabInfo,lesson,'normal',{});
+      let marks=[],unclear=0,heard='';
+      if(r){for(const g of groupUnits(r.units)){if(g.status==='flag')marks.push({w:g.w,c:g.c,type:g.kind==='vowel'?'nikud':'letter'});
+          else if(g.status==='skip')marks.push({w:g.w,c:g.c,type:'missing'});else if(g.status==='unclear')unclear++;}heard=show(r.heard);}
+      const seen=new Set();marks=marks.filter(m=>{const k=`${m.w}:${m.c}:${m.type}`;if(seen.has(k))return false;seen.add(k);return true;});
+      await sb.from('tests').update({ai_marks:marks,ai_unclear:unclear,ai_heard:heard,ai_version:AI_VERSION,ai_checked_at:new Date().toISOString()}).eq('id',t.id);}
+    msg(`AI checked ${todo.length} test${todo.length>1?'s':''} ✓`);loadTests();
+  }catch(e){console.error(e);msg('The AI check stopped. Check the internet connection and try again.');}
+  finally{$('r-ai').disabled=false;$('r-prog').hidden=true;}
+};
+
+start();
+</script>
+</body>
+</html>
