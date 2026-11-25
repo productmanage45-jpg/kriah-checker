@@ -58,6 +58,15 @@ tr.click{cursor:pointer}tr.click:hover td{background:color-mix(in srgb,var(--acc
 .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
 .stat{border:1px solid var(--line);border-radius:12px;padding:10px}.stat b{display:block;font-size:1.4rem}
 progress{width:min(100%,360px);accent-color:var(--accent)}
+.welcome{text-align:center;max-width:620px;margin:28px auto 22px}
+.welcome-mark{display:inline-grid;place-items:center;width:72px;height:72px;border-radius:20px;background:var(--accent);color:var(--accent-ink);font:700 2.6rem/1 'Frank Ruhl Libre',serif;margin-bottom:12px}
+.welcome h2{font-size:clamp(1.7rem,5vw,2.4rem);margin:0 0 10px;letter-spacing:-.02em}
+.welcome p{color:var(--soft);font-size:1.05rem;margin:0}
+.login-card{max-width:380px;margin:0 auto}
+.login-card h3{margin:0 0 10px;font-size:1.1rem}
+.login-card input{width:100%;margin-bottom:10px}
+.login-card .btn{width:100%;min-height:46px;margin:4px 0 10px}
+.login-card .muted{margin:0;text-align:center}
 .scroll{overflow-x:auto}
 </style>
 </head>
@@ -80,13 +89,19 @@ progress{width:min(100%,360px);accent-color:var(--accent)}
   <p>This page needs the school's Supabase project. Put the Project URL and anon key at the top of the script in school.html.</p>
 </section>
 
-<!-- Login -->
-<section id="v-login" class="card" hidden>
-  <h2>Teacher sign in</h2>
-  <div class="row">
-    <div><label class="f" for="email">Email</label><input id="email" type="email" autocomplete="username"></div>
-    <div><label class="f" for="pass">Password</label><input id="pass" type="password" autocomplete="current-password"></div>
+<!-- Login / welcome -->
+<section id="v-login" hidden>
+  <div class="welcome">
+    <div class="welcome-mark" aria-hidden="true">א</div>
+    <h2>Welcome to Kriah Testing</h2>
+    <p>Oholei Torah's kriah testing for teachers. Test each child's reading, mark mistakes letter by letter, follow their progress through every darga, and share report cards with parents.</p>
+  </div>
+  <div class="card login-card">
+    <h3>Teacher sign in</h3>
+    <label class="f" for="email">Email</label><input id="email" type="email" autocomplete="username">
+    <label class="f" for="pass">Password</label><input id="pass" type="password" autocomplete="current-password">
     <button class="btn primary" id="login" type="button">Sign in</button>
+    <p class="muted">Don't have an account? Ask the school's kriah coordinator to add you.</p>
   </div>
 </section>
 
