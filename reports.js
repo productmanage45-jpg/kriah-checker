@@ -48,8 +48,10 @@ $('signout').before(btn);
 const sec=document.createElement('section');sec.id='v-reports';sec.hidden=true;
 sec.innerHTML=`<div class="card no-print"><div class="row">
     <div><label class="f" for="rp-class">Class</label><select id="rp-class"></select></div>
-    <button class="btn" id="rp-refresh" type="button">Refresh</button></div>
+    <button class="btn" id="rp-refresh" type="button">Refresh</button>
+    <button class="btn primary" id="rp-email" type="button">Email parents (this class)</button></div>
     <p class="muted">Green = mastered (${MASTERED}%+), light green = passing (${PASSING}%+), yellow = needs practice (${PRACTICE}%+), red = not yet. Click a student for the report card.</p></div>
+  <div class="card scroll no-print" id="rp-bulk" hidden></div>
   <div class="card scroll no-print" id="rp-overview"></div>
   <div class="card" id="rp-card" hidden></div>`;
 $('v-classes').after(sec);
@@ -60,7 +62,7 @@ btn.onclick=async()=>{for(const v of['setup','login','test','review','classes'])
   document.querySelectorAll('#nav [data-view]').forEach(b=>b.classList.toggle('on',b===btn));sec.hidden=false;msg('');
   fillClasses();await load();};
 function fillClasses(){const keep=$('rp-class').value;$('rp-class').innerHTML=classes.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('');if(keep)$('rp-class').value=keep;}
-$('rp-class').onchange=load;$('rp-refresh').onclick=load;
+$('rp-class').onchange=()=>{$('rp-bulk').hidden=true;load();};$('rp-refresh').onclick=load;
 
 async function load(){
   cls=$('rp-class').value;if(!cls){$('rp-overview').innerHTML='<p>Add a class first.</p>';return;}
@@ -128,6 +130,48 @@ function drawCard(sid){
   $('rp-card').hidden=false;$('rp-card').scrollIntoView({behavior:'smooth'});
 }
 
+function summarize(sid){const s=students.find(x=>x.id===sid),c=classes.find(x=>x.id===s?.class_id);
+  const mine=tests.filter(t=>t.student_id===sid),by=latestByLevel(mine),h=holding(by);
+  const passed=LEVELS.filter(l=>(by.get(l.id)?.score??-1)>=PASSING).length,scored=mine.filter(t=>t.score!=null);
+  return{s,name:s?.name||'',cls:c?.name||'',holding:h?`דרגא ${h.n}${h.p?' · '+h.p:''} — ${h.d}`:'All dargas passed',passed,total:LEVELS.length,
+    avg:scored.length?Math.round(scored.reduce((a,t)=>a+t.score,0)/scored.length):null,
+    skills:LEVELS.map(l=>{const t=by.get(l.id);return{n:l.n,d:l.d,ex:l.ex,st:statusOf(t?.score)[0],sc:t?.score??null};}),tests:mine};}
+async function reportPayload(sum){const list=[];for(const t of sum.tests.slice(-5).reverse())list.push(testPayload(t,await signed(t.audio_path,MONTH)));
+  return{v:1,name:sum.name,cls:sum.cls,made:Date.now(),holding:sum.holding,passed:sum.passed,total:sum.total,avg:sum.avg,skills:sum.skills,tests:list};}
+function emailText(name,cls,link){
+  return{subject:`Kriah report: ${name}`,
+    body:`Dear parents of ${name},\n\nHere is ${name}'s kriah report from ${cls}. You can see each reading test with the mistakes marked, and listen to the recordings:\n\n${link}\n\nThe recordings in this link are available for 30 days.\n\nThank you,\nOholei Torah`};}
+const csvCell=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
+let bulkRows=[];
+$('rp-email').onclick=async()=>{
+  const kids=students.filter(s=>s.class_id===cls);if(!kids.length){msg('No students in this class.');return;}
+  $('rp-email').disabled=true;bulkRows=[];let n=0;
+  try{for(const k of kids){n++;msg(`Preparing parent emails… ${n} of ${kids.length}`);const sum=summarize(k.id);
+      if(!sum.tests.length){bulkRows.push({name:k.name,email:k.parent_email||'',link:null});continue;}
+      const link=await makeLink(await reportPayload(sum));bulkRows.push({name:k.name,email:k.parent_email||'',link,cls:sum.cls});}
+    drawBulk();msg('Parent emails ready ✓');}
+  catch(e){console.error(e);msg('Could not prepare the emails. Check the internet connection.');}
+  finally{$('rp-email').disabled=false;}};
+function drawBulk(){
+  const ready=bulkRows.filter(r=>r.link&&r.email).length,noEmail=bulkRows.filter(r=>r.link&&!r.email).length,noTests=bulkRows.filter(r=>!r.link).length;
+  $('rp-bulk').innerHTML=`<div class="rp-head"><h2 style="margin:0;font-size:1.05rem">Parent emails</h2>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" type="button" data-bulk-csv="1">Download list (CSV for mail merge)</button><button class="btn" type="button" data-bulk-close="1">Close</button></div></div>
+    <p class="muted">${ready} ready to send${noEmail?` · ${noEmail} without a parent email (add it in Classes)`:''}${noTests?` · ${noTests} with no tests yet`:''}. Click a button to open the email, already written, then press Send.</p>
+    <table><tr><th>Student</th><th>Parent email</th><th></th></tr>${bulkRows.map((r,i)=>`<tr><td><b>${esc(r.name)}</b></td><td>${r.email?esc(r.email):'<span class="muted">—</span>'}</td><td>${!r.link?'<span class="muted">no tests yet</span>':
+      `<button class="btn rp-small" type="button" data-bulk-mail="${i}">Email app</button> <button class="btn rp-small" type="button" data-bulk-gmail="${i}">Gmail</button> <button class="btn rp-small" type="button" data-bulk-copy="${i}">Copy link</button>`}</td></tr>`).join('')}</table>`;
+  $('rp-bulk').hidden=false;$('rp-bulk').scrollIntoView({behavior:'smooth'});}
+$('rp-bulk').addEventListener('click',async e=>{const b=e.target.closest('button');if(!b)return;const d=b.dataset;
+  if(d.bulkClose){$('rp-bulk').hidden=true;return;}
+  if(d.bulkCsv){const lines=[['Student','Parent email','Subject','Message','Link'].map(csvCell).join(',')];
+    for(const r of bulkRows)if(r.link){const m=emailText(r.name,r.cls,r.link);lines.push([r.name,r.email,m.subject,m.body,r.link].map(csvCell).join(','));}
+    const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+lines.join('\r\n')],{type:'text/csv'}));
+    a.download=`kriah-parent-emails-${($('rp-class').selectedOptions[0]?.text||'class').replace(/\W+/g,'-')}.csv`;a.click();return;}
+  const i=+(d.bulkMail??d.bulkGmail??d.bulkCopy),r=bulkRows[i];if(!r)return;const m=emailText(r.name,r.cls,r.link);
+  if(d.bulkCopy!=null){try{await navigator.clipboard.writeText(r.link);msg(`Link for ${r.name} copied ✓`);}catch{prompt('Copy this link:',r.link);}return;}
+  if(d.bulkMail!=null)location.href=`mailto:${encodeURIComponent(r.email)}?subject=${encodeURIComponent(m.subject)}&body=${encodeURIComponent(m.body)}`;
+  else window.open(`https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(r.email)}&su=${encodeURIComponent(m.subject)}&body=${encodeURIComponent(m.body)}`,'_blank');
+  b.textContent='Opened ✓';});
+
 // ---- Worksheets (marked passage + recording) and parent links ----
 function testPayload(t,audio){const d=mistakeDetails(t);
   return{date:t.created_at,title:t.passage_title,score:t.score,text:t.passage_text,marks:(t.teacher_marks||[]).map(m=>[m.w,m.c,m.type[0]]),
@@ -136,8 +180,13 @@ async function signed(path,secs){if(!path)return null;const r=await sb.storage.f
 async function encode(obj){const bytes=new TextEncoder().encode(JSON.stringify(obj));
   const z=new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(new CompressionStream('deflate-raw'))).arrayBuffer());
   let s='';for(const b of z)s+=String.fromCharCode(b);return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');}
+async function makeLink(obj){
+  const base=new URL('share.html',location.href).href;
+  const r=await sb.from('shares').insert({payload:obj}).select('id').single();
+  if(!r.error&&r.data)return base+'?id='+r.data.id;
+  return base+'#'+await encode(obj);}
 async function share(obj){
-  const url=new URL('share.html',location.href).href+'#'+await encode(obj);
+  const url=await makeLink(obj);
   try{await navigator.clipboard.writeText(url);msg('Parent link copied ✓ Paste it into an email or WhatsApp. Recordings in the link work for 30 days.');}
   catch{prompt('Copy this link for the parents:',url);}
 }
@@ -153,8 +202,6 @@ $('rp-card').addEventListener('click',async e=>{
     const u=await signed(t.audio_path,3600);if(u)cell.querySelector('audio').src=u;else cell.querySelector('audio').hidden=true;return;}
   if(sh){const t=tests.find(x=>x.id===sh.dataset.shareTest);msg('Preparing link…');
     await share({v:1,name:card.name,cls:card.cls,made:Date.now(),tests:[testPayload(t,await signed(t.audio_path,MONTH))]});return;}
-  if(rp&&card){msg('Preparing link…');const recent=card.tests.slice(-5).reverse(),list=[];
-    for(const t of recent)list.push(testPayload(t,await signed(t.audio_path,MONTH)));
-    await share({v:1,name:card.name,cls:card.cls,made:Date.now(),holding:card.holding,passed:card.passed,total:card.total,avg:card.avg,skills:card.skills,tests:list});}
+  if(rp&&card){msg('Preparing link…');await share(await reportPayload(summarize(student)));}
 });
 })();

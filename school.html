@@ -179,8 +179,8 @@ progress{width:min(100%,360px);accent-color:var(--accent)}
 <section id="v-classes" hidden>
   <div class="card">
     <h2 style="margin-top:0;font-size:1.05rem">Add students</h2>
-    <p class="muted">Paste one student per line as: <b>Class, Student name</b>. New classes are created automatically.</p>
-    <textarea id="c-paste" rows="6" placeholder="Grade 2A, Moshe K.&#10;Grade 2A, Levi S."></textarea>
+    <p class="muted">Paste one student per line as: <b>Class, Student name, Parent email</b> (the email is optional). New classes are created automatically. Pasting a student who already exists updates the parent email.</p>
+    <textarea id="c-paste" rows="6" placeholder="Grade 2A, Moshe K., parent@example.com&#10;Grade 2A, Levi S."></textarea>
     <div class="rec-row" style="justify-content:flex-start"><button class="btn primary" id="c-import" type="button">Add students</button></div>
   </div>
   <div class="card scroll"><table id="c-table"></table></div>
@@ -360,7 +360,11 @@ $('t-next').onclick=()=>{nextStudent();msg('');};
 // ===== Classes =====
 async function drawClasses(){await loadRoster();
   $('c-table').innerHTML='<tr><th>Class</th><th>Students</th></tr>'+classes.map(c=>{const list=students.filter(s=>s.class_id===c.id);
-    return `<tr><td><b>${esc(c.name)}</b></td><td>${list.map(s=>`${esc(s.name)} <button class="btn" style="padding:2px 8px;font-size:.8rem" data-rm="${s.id}" type="button">remove</button>`).join(' · ')||'—'}</td></tr>`;}).join('');}
+    return `<tr><td><b>${esc(c.name)}</b></td><td>${list.map(s=>`${esc(s.name)} <span class="muted">${s.parent_email?esc(s.parent_email):'no parent email'}</span> <button class="btn" style="padding:2px 8px;font-size:.8rem" data-email="${s.id}" type="button">email</button> <button class="btn" style="padding:2px 8px;font-size:.8rem" data-rm="${s.id}" type="button">remove</button>`).join('<br>')||'—'}</td></tr>`;}).join('');}
+$('c-table').addEventListener('click',async e=>{const id=e.target.dataset.email;if(!id)return;const st=students.find(x=>x.id===id);
+  const v=prompt(`Parent email for ${st.name} (leave empty to remove):`,st.parent_email||'');if(v===null)return;
+  const r=await sb.from('students').update({parent_email:v.trim()||null}).eq('id',id);
+  msg(r.error?'Could not save the email. Run the database update (update-parents.sql) first.':'Parent email saved ✓');drawClasses();});
 $('c-table').onclick=async e=>{const id=e.target.dataset.rm;if(!id)return;if(!confirm('Remove this student from the list? Saved tests stay.'))return;
   await sb.from('students').update({active:false}).eq('id',id);drawClasses();};
 $('c-import').onclick=async()=>{
@@ -368,9 +372,13 @@ $('c-import').onclick=async()=>{
   if(!lines.length){msg('Paste lines like: Grade 2A, Moshe K.');return;}
   msg('Adding…');
   for(const name of new Set(lines.map(p=>p[0])))if(!classes.some(c=>c.name===name)){const r=await sb.from('classes').insert({name}).select().single();if(!r.error)classes.push(r.data);}
-  const rows=lines.map(([cls,name])=>({class_id:classes.find(c=>c.name===cls)?.id,name})).filter(r=>r.class_id&&!students.some(s=>s.class_id===r.class_id&&s.name===r.name));
-  if(rows.length){const r=await sb.from('students').insert(rows);if(r.error){msg('Could not add students.');return;}}
-  $('c-paste').value='';msg(`Added ${rows.length} student${rows.length===1?'':'s'}.`);drawClasses();
+  let updated=0;
+  for(const[cls,name,email]of lines){const cid=classes.find(c=>c.name===cls)?.id,ex=students.find(s=>s.class_id===cid&&s.name===name);
+    if(ex&&email&&email!==ex.parent_email){const r=await sb.from('students').update({parent_email:email}).eq('id',ex.id);if(r.error){msg('Could not save parent emails. Run the database update (update-parents.sql) first.');return;}updated++;}}
+  const rows=lines.map(([cls,name,email])=>{const r={class_id:classes.find(c=>c.name===cls)?.id,name};if(email)r.parent_email=email;return r;})
+    .filter(r=>r.class_id&&!students.some(s=>s.class_id===r.class_id&&s.name===r.name));
+  if(rows.length){const r=await sb.from('students').insert(rows);if(r.error){msg('Could not add students.'+(rows.some(x=>x.parent_email)?' If you included emails, run the database update (update-parents.sql) first.':''));return;}}
+  $('c-paste').value='';msg(`Added ${rows.length} student${rows.length===1?'':'s'}${updated?`, updated ${updated} parent email${updated===1?'':'s'}`:''}.`);drawClasses();
 };
 
 // ===== Review =====

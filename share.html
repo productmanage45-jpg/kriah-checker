@@ -42,7 +42,9 @@ audio{display:block;margin:8px auto 0;width:min(100%,440px)}
 </head>
 <body>
 <div class="wrap" id="app"><div class="card"><p>Loading…</p></div></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 <script>
+const SUPABASE_URL='https://jdbetusvkpewmockmbds.supabase.co',SUPABASE_KEY='sb_publishable_iVQxmXnpLDBEYmanNDtlqQ_2C4y2uQf';
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]);
 const fmt=d=>new Date(d).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'});
 const words=t=>String(t).replace(/[\u05BE\u05C3\u05C0]/g,' ').split(/\s+/).filter(w=>/[\u05D0-\u05EA]/.test(w));
@@ -55,7 +57,9 @@ async function decode(code){const b=atob(code.replace(/-/g,'+').replace(/_/g,'/'
   return JSON.parse(await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).text());}
 (async()=>{
   const app=document.getElementById('app');
-  let d;try{d=await decode(location.hash.slice(1));}catch{app.innerHTML='<div class="card"><h1>This link is not complete</h1><p class="muted">Please ask the teacher to send the link again.</p></div>';return;}
+  let d;try{const id=new URLSearchParams(location.search).get('id');
+    if(id){const r=await supabase.createClient(SUPABASE_URL,SUPABASE_KEY).rpc('get_share',{share_id:id});if(r.error||!r.data)throw 0;d=r.data;}
+    else d=await decode(location.hash.slice(1));}catch{app.innerHTML='<div class="card"><h1>This link is not available</h1><p class="muted">It may be incomplete or older than 30 days. Please ask the teacher to send a new link.</p></div>';return;}
   document.title=`Kriah Report · ${d.name}`;
   let html=`<div class="card"><div class="top"><div><span class="mark">א</span><h1 style="display:inline;vertical-align:middle">${esc(d.name)}</h1>
     <p class="muted" style="margin:6px 0 0">${esc(d.cls)} · Kriah report · ${fmt(d.made)}</p></div><button class="btn" onclick="print()">Print</button></div>`;
