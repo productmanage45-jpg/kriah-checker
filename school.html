@@ -155,7 +155,8 @@ progress{width:min(100%,360px);accent-color:var(--accent)}
     <label style="display:flex;gap:8px;align-items:center;justify-content:center;margin:10px 0"><input type="checkbox" id="r-showai" style="min-height:0;width:20px;height:20px"> Show AI marks (thin lines)</label>
     <div id="r-verse" class="verse" lang="he"></div>
     <p class="muted" id="r-compare" style="text-align:center"></p>
-    <div class="rec-row"><button class="btn primary" id="r-save" type="button">Save changes to teacher marks</button><button class="btn no" id="r-del" type="button">Delete test</button></div>
+    <div class="rec-row"><button class="btn" id="r-clear" type="button">Clear all marks</button><button class="btn primary" id="r-save" type="button">Save changes to teacher marks</button></div>
+    <div class="rec-row"><button class="btn" id="r-resetai" type="button">Reset AI check</button><button class="btn no" id="r-del" type="button">Delete test</button></div>
   </div>
 </section>
 
@@ -240,7 +241,8 @@ async function loadRoster(){
 }
 function fillStudents(classSel,studentSel,all){const cid=$(classSel).value,el=$(studentSel),keep=el.value;
   const list=students.filter(s=>!cid||s.class_id===cid);
-  el.innerHTML=(all?'<option value="">All students</option>':'')+list.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('');
+  el.innerHTML=(all?'<option value="">All students</option><option value="training">★ Training recordings</option>':'<option value="training">★ Training only (no student)</option>')+list.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('');
+  if(!all&&!keep&&list.length)el.value=list[0].id;
   if(keep&&list.some(s=>s.id===keep))el.value=keep;}
 $('t-class').onchange=()=>fillStudents('t-class','t-student',false);
 $('r-class').onchange=()=>fillStudents('r-class','r-student',true);
@@ -328,15 +330,16 @@ $('t-save').onclick=async()=>{
   try{const id=crypto.randomUUID(),ext=/mp4|aac/.test(blob.type)?'m4a':/ogg/.test(blob.type)?'ogg':'webm',path=`${id}.${ext}`;
     const up=await sb.storage.from('recordings').upload(path,blob,{contentType:blob.type||'audio/webm'});if(up.error)throw up.error;
     const{data:u}=await sb.auth.getUser();
-    const ins=await sb.from('tests').insert({id,student_id:$('t-student').value,class_id:$('t-class').value,teacher_email:u.user?.email,
+    const training=$('t-student').value==='training';
+    const ins=await sb.from('tests').insert({id,student_id:training?null:$('t-student').value,class_id:training?null:$('t-class').value,teacher_email:u.user?.email,
       passage_title:passageTitle(),passage_text:passageText(),audio_path:path,audio_type:blob.type,duration:blob.duration,teacher_marks:marksToList(tMarks)});
     if(ins.error)throw ins.error;
-    msg(`Saved ✓ ${$('t-student').selectedOptions[0].text}`);nextStudent();
+    msg(training?'Saved ✓ training recording':`Saved ✓ ${$('t-student').selectedOptions[0].text}`);nextStudent();
   }catch(e){console.error(e);msg('Could not save. Check the internet connection and try again.');}
   finally{saving=false;updateSave();}
 };
 function nextStudent(){tMarks.clear();blob=null;$('t-play').hidden=true;$('timer').textContent='';$('rec').textContent='Record';
-  const el=$('t-student');if(el.selectedIndex<el.options.length-1)el.selectedIndex++;if(isDarga())newLevelWords();drawTest();}
+  const el=$('t-student');if(el.value!=='training'&&el.selectedIndex<el.options.length-1)el.selectedIndex++;if(isDarga())newLevelWords();drawTest();}
 $('t-next').onclick=()=>{nextStudent();msg('');};
 
 // ===== Classes =====
@@ -359,9 +362,10 @@ $('c-import').onclick=async()=>{
 let tests=[],current=null,rMarks=new Set();
 async function loadTests(){
   let q=sb.from('tests').select('*').order('created_at',{ascending:false}).limit(500);
-  if($('r-class').value)q=q.eq('class_id',$('r-class').value);if($('r-student').value)q=q.eq('student_id',$('r-student').value);
+  if($('r-student').value==='training')q=q.is('student_id',null);
+  else{if($('r-class').value)q=q.eq('class_id',$('r-class').value);if($('r-student').value)q=q.eq('student_id',$('r-student').value);}
   const r=await q;if(r.error){msg('Could not load tests.');return;}tests=r.data;
-  const name=id=>students.find(s=>s.id===id)?.name||'(removed)';
+  const name=id=>id?(students.find(s=>s.id===id)?.name||'(removed)'):'★ Training';
   $('r-table').innerHTML='<tr><th>Date</th><th>Student</th><th>Passage</th><th>Teacher marks</th><th>AI agreement</th></tr>'+tests.map(t=>{
     const c=t.ai_marks?compare(listToMarks(t.teacher_marks),listToMarks(t.ai_marks)):null;
     return `<tr class="click" data-id="${t.id}"><td>${new Date(t.created_at).toLocaleString()}</td><td>${esc(name(t.student_id))}</td><td>${esc(t.passage_title)}</td><td>${(t.teacher_marks||[]).length}</td><td>${c?`${c.agree} agree · ${c.missed} missed · ${c.extra} false`:'not checked'}</td></tr>`;}).join('');
@@ -378,7 +382,7 @@ function drawStats(){const done=tests.filter(t=>t.ai_marks);$('r-stats-box').hid
     `<div class="stat"><b>${v.a}/${v.a+v.m}</b>${names[k]} mistakes the AI caught<br><span class="muted">${v.e} false alarms</span></div>`).join('');}
 $('r-table').onclick=async e=>{const tr=e.target.closest('tr[data-id]');if(!tr)return;current=tests.find(t=>t.id===tr.dataset.id);
   rMarks=listToMarks(current.teacher_marks);$('r-detail').hidden=false;
-  $('r-title').textContent=`${students.find(s=>s.id===current.student_id)?.name||''} · ${current.passage_title} · ${new Date(current.created_at).toLocaleDateString()}`;
+  $('r-title').textContent=`${current.student_id?(students.find(s=>s.id===current.student_id)?.name||''):'★ Training'} · ${current.passage_title} · ${new Date(current.created_at).toLocaleDateString()}`;
   const u=await sb.storage.from('recordings').createSignedUrl(current.audio_path,3600);$('r-play').src=u.data?.signedUrl||'';
   drawReview();$('r-detail').scrollIntoView({behavior:'smooth'});};
 function drawReview(){const ai=$('r-showai').checked&&current.ai_marks?listToMarks(current.ai_marks):null;
@@ -387,6 +391,10 @@ function drawReview(){const ai=$('r-showai').checked&&current.ai_marks?listToMar
   $('r-compare').textContent=c?`AI: ${c.agree} agree, ${c.missed} missed, ${c.extra} false alarms${current.ai_unclear?`, ${current.ai_unclear} unsure`:''}.`:'Not AI-checked yet.';}
 enableMarking($('r-verse'),()=>rMarks,drawReview);
 $('r-showai').onchange=()=>current&&drawReview();
+$('r-clear').onclick=()=>{if(!current)return;rMarks.clear();drawReview();msg('All marks cleared. Click "Save changes to teacher marks" to keep this.');};
+$('r-resetai').onclick=async()=>{if(!current||!confirm('Remove the AI marks for this test? You can run the AI check again later.'))return;
+  const r=await sb.from('tests').update({ai_marks:null,ai_unclear:null,ai_heard:null,ai_version:null,ai_checked_at:null}).eq('id',current.id);
+  if(r.error){msg('Could not reset the AI check.');return;}current.ai_marks=null;drawReview();msg('AI check reset ✓');loadTests();};
 $('r-save').onclick=async()=>{const r=await sb.from('tests').update({teacher_marks:marksToList(rMarks)}).eq('id',current.id);
   msg(r.error?'Could not save changes.':'Teacher marks updated ✓');if(!r.error){current.teacher_marks=marksToList(rMarks);loadTests();}};
 $('r-del').onclick=async()=>{if(!confirm('Delete this test and its recording? This cannot be undone.'))return;
