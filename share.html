@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Kriah Report</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Frank+Ruhl+Libre:wght@500;700&family=Rubik:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--paper:#f3f6f1;--card:#fff;--ink:#1f2a24;--soft:#5b6b62;--line:#d8e0d9;--accent:#24577a;--accent-ink:#fff;
+  --good:#2f7d52;--good-bg:#dcefe3;--miss:#b8441a;--miss-bg:#fbe1d3;--yel:#7a5600;--yel-bg:#ffe58f;--blue:#1d4fa3;--blue-bg:#dbe8ff;color-scheme:light}
+@media (prefers-color-scheme:dark){:root{--paper:#141a17;--card:#1c2420;--ink:#e6ece8;--soft:#9fb0a6;--line:#2f3a34;--accent:#7db4dc;--accent-ink:#0d1a24;
+  --good:#7fd1a0;--good-bg:#1f3a2b;--miss:#ff9b72;--miss-bg:#45261a;--yel:#ffd772;--yel-bg:#433715;--blue:#9cc3ff;--blue-bg:#1b2c4a;color-scheme:dark}}
+*{box-sizing:border-box}[hidden]{display:none!important}
+body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.5 Rubik,system-ui,sans-serif}
+.wrap{max-width:860px;margin:0 auto;padding:20px 16px 50px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:18px;margin-bottom:14px}
+.top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
+.mark{display:inline-grid;place-items:center;width:44px;height:44px;border-radius:12px;background:var(--accent);color:var(--accent-ink);font:700 1.6rem 'Frank Ruhl Libre',serif;margin-right:10px;vertical-align:middle}
+h1{font-size:1.5rem;margin:0}h2{font-size:1.1rem;margin:0 0 8px}
+.muted{color:var(--soft);font-size:.92rem}
+.btn{font:500 .95rem Rubik,sans-serif;color:var(--accent);background:var(--card);border:1px solid var(--line);border-radius:10px;padding:9px 14px;cursor:pointer}
+.big{font-size:1.2rem;font-weight:600;margin:6px 0}
+.bar{height:14px;border-radius:999px;background:var(--line);overflow:hidden;margin:6px 0}.bar i{display:block;height:100%;background:var(--good)}
+.chip{display:inline-block;padding:2px 10px;border-radius:999px;font-size:.82rem;font-weight:600;white-space:nowrap}
+.c-m{background:var(--good-bg);color:var(--good)}.c-p{background:#e3f1e6;color:#3f7a4f}.c-n{background:var(--yel-bg);color:var(--yel)}.c-x{background:var(--miss-bg);color:var(--miss)}.c-t{color:var(--soft);border:1px dashed var(--line)}
+table{width:100%;border-collapse:collapse;font-size:.93rem}th{text-align:left;font-weight:500;color:var(--soft);font-size:.82rem;padding:6px;border-bottom:1px solid var(--line)}td{padding:6px;border-bottom:1px solid var(--line)}
+.he{font-family:'Frank Ruhl Libre',serif;font-size:1.1rem}
+.verse{direction:rtl;text-align:center;font:700 clamp(1.7rem,6vw,2.6rem)/1.9 'Frank Ruhl Libre','Times New Roman',serif;margin:8px 0}
+.verse .w{display:inline-block;white-space:nowrap;margin:0 .14em}.verse.list .w{margin:0 .45em}
+.verse .L{display:inline-block;padding:.06em .02em;border-radius:.14em;line-height:1.35}
+.verse .L.letter{background:var(--yel-bg);color:var(--yel)}.verse .L.nikud{color:var(--miss);box-shadow:inset 0 -.12em var(--miss)}
+.verse .L.missing{background:var(--blue-bg);color:var(--blue);outline:.05em dashed var(--blue)}
+.legend{display:flex;justify-content:center;flex-wrap:wrap;gap:6px 16px;font-size:.86rem;color:var(--soft);list-style:none;padding:0;margin:0 0 6px}
+.legend i{display:inline-block;width:.85em;height:.85em;border-radius:3px;margin-right:6px;vertical-align:-.05em}
+audio{display:block;margin:8px auto 0;width:min(100%,440px)}
+.scroll{overflow-x:auto}
+@media print{.btn,audio{display:none!important}body{background:#fff}.card{border:0;padding:8px 0}}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"><div class="card"><p>Loading…</p></div></div>
+<script>
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]);
+const fmt=d=>new Date(d).toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'});
+const words=t=>String(t).replace(/[\u05BE\u05C3\u05C0]/g,' ').split(/\s+/).filter(w=>/[\u05D0-\u05EA]/.test(w));
+function segs(w){const s=[];for(const ch of w){if(ch>='\u05D0'&&ch<='\u05EA'||!s.length)s.push(ch);else s[s.length-1]+=ch;}return s;}
+const chipClass=st=>({'Mastered':'c-m','Passing':'c-p','Needs practice':'c-n','Not yet':'c-x'})[st]||'c-t';
+const scoreChip=s=>s==null?'<span class="chip c-t">—</span>':`<span class="chip ${s>=95?'c-m':s>=85?'c-p':s>=70?'c-n':'c-x'}">${s}%</span>`;
+function verse(text,marks,isList){const m=new Map();for(const[w,c,t]of marks){const k=w+':'+c;m.set(k,(m.get(k)||'')+' '+({l:'letter',n:'nikud',m:'missing'})[t]);}
+  return `<div class="verse${isList?' list':''}" dir="rtl" lang="he">`+words(text).map((w,wi)=>`<span class="w">${segs(w).map((s,ci)=>`<span class="L${m.get(wi+':'+ci)||''}">${esc(s)}</span>`).join('')}</span>`).join(' ')+'</div>';}
+async function decode(code){const b=atob(code.replace(/-/g,'+').replace(/_/g,'/'));const bytes=Uint8Array.from(b,c=>c.charCodeAt(0));
+  return JSON.parse(await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).text());}
+(async()=>{
+  const app=document.getElementById('app');
+  let d;try{d=await decode(location.hash.slice(1));}catch{app.innerHTML='<div class="card"><h1>This link is not complete</h1><p class="muted">Please ask the teacher to send the link again.</p></div>';return;}
+  document.title=`Kriah Report · ${d.name}`;
+  let html=`<div class="card"><div class="top"><div><span class="mark">א</span><h1 style="display:inline;vertical-align:middle">${esc(d.name)}</h1>
+    <p class="muted" style="margin:6px 0 0">${esc(d.cls)} · Kriah report · ${fmt(d.made)}</p></div><button class="btn" onclick="print()">Print</button></div>`;
+  if(d.holding){html+=`<p class="big">Now working on: ${esc(d.holding)}</p><div class="bar"><i style="width:${Math.round(100*d.passed/d.total)}%"></i></div>
+    <p class="muted" style="margin:0">${d.passed} of ${d.total} reading levels passed${d.avg!=null?` · average accuracy ${d.avg}%`:''}</p>`;}
+  html+='</div>';
+  for(const t of d.tests){const isList=/^דרגא/.test(t.title);
+    html+=`<div class="card"><div class="top"><div><h2 class="${isList?'':'he'}" style="margin:0">${esc(t.title)}</h2><p class="muted" style="margin:2px 0">${fmt(t.date)} · ${t.mk[0]} nikud · ${t.mk[1]} letter · ${t.mk[2]} skipped</p></div>${scoreChip(t.score)}</div>
+      <ul class="legend"><li><i style="background:var(--yel-bg)"></i>Letter mistake</li><li><i style="background:var(--miss-bg)"></i>Nikud mistake</li><li><i style="background:var(--blue-bg)"></i>Skipped</li></ul>
+      ${verse(t.text,t.marks,isList)}${t.audio?`<audio controls preload="none" src="${esc(t.audio)}"></audio>`:''}</div>`;}
+  if(d.skills){html+=`<div class="card"><h2>Reading levels</h2><div class="scroll"><table><tr><th>Level</th><th>Skill</th><th>Status</th><th>Score</th></tr>`+
+    d.skills.map(s=>`<tr><td><b>${esc(s.n)}</b></td><td>${esc(s.d)} <span class="he">${s.ex!=='—'?esc(s.ex):''}</span></td><td><span class="chip ${chipClass(s.st)}">${esc(s.st)}</span></td><td>${s.sc!=null?s.sc+'%':''}</td></tr>`).join('')+'</table></div></div>';}
+  html+=`<p class="muted" style="text-align:center">Recordings in this link are available for 30 days from ${fmt(d.made)}.</p>`;
+  app.innerHTML=html;
+  for(const a of app.querySelectorAll('audio'))a.addEventListener('error',()=>{a.outerHTML='<p class="muted" style="text-align:center">This recording link has expired.</p>';});
+})();
+</script>
+</body>
+</html>
