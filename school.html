@@ -96,7 +96,18 @@ progress{width:min(100%,360px);accent-color:var(--accent)}
     <div class="row">
       <div><label class="f" for="t-class">Class</label><select id="t-class"></select></div>
       <div><label class="f" for="t-student">Student</label><select id="t-student"></select></div>
-      <div><label class="f" for="t-passage">Passage</label><select id="t-passage"></select></div>
+      <div><label class="f" for="t-type">Test</label><select id="t-type"><option value="darga">Darga (level)</option><option value="passage">Passage</option></select></div>
+    </div>
+    <div class="row" id="t-darga-box" style="margin-top:10px">
+      <div><label class="f" for="t-level">Darga</label><select id="t-level"></select></div>
+      <div><label class="f" for="t-count">Number of words</label><input id="t-count" type="number" min="3" max="80" value="12" style="width:7em"></div>
+    </div>
+    <div class="row" id="t-passage-box" style="margin-top:10px" hidden>
+      <div><label class="f" for="t-source">Passage</label><select id="t-source">
+        <option value="bereishis">Parshas Bereishis</option><option value="davening">Davening (beginning)</option><option value="custom">My own passage</option></select></div>
+      <div id="t-section-box" hidden><label class="f" for="t-section">Section</label><select id="t-section"></select></div>
+      <div id="t-start-box"><label class="f" for="t-start">Start at</label><select id="t-start"></select></div>
+      <div id="t-len-box"><label class="f" for="t-len" id="t-len-label">How many psukim</label><input id="t-len" type="number" min="1" max="30" value="3" style="width:6em"></div>
     </div>
     <p class="muted" id="t-level-info" style="margin:8px 0 0"></p>
     <div id="t-custom-box" hidden style="margin-top:10px"><label class="f" for="t-custom">Hebrew with nikud</label>
@@ -120,7 +131,7 @@ progress{width:min(100%,360px);accent-color:var(--accent)}
       <button class="btn primary" id="t-save" type="button" disabled>Save test</button>
       <button class="btn" id="t-next" type="button">Next student</button>
     </div>
-    <p class="muted" style="text-align:center" id="t-count"></p>
+    <p class="muted" style="text-align:center" id="t-count-marks"></p>
   </div>
 </section>
 
@@ -167,15 +178,6 @@ progress{width:min(100%,360px);accent-color:var(--accent)}
 const SUPABASE_URL='https://jdbetusvkpewmockmbds.supabase.co';
 const SUPABASE_ANON_KEY='sb_publishable_iVQxmXnpLDBEYmanNDtlqQ_2C4y2uQf';
 
-const PASSAGES={
-  'b1':['Bereishis 1:1','בְּרֵאשִׁית בָּרָא אֱלֹהִים אֵת הַשָּׁמַיִם וְאֵת הָאָרֶץ'],
-  'b2':['Bereishis 1:2','וְהָאָרֶץ הָיְתָה תֹהוּ וָבֹהוּ וְחֹשֶׁךְ עַל פְּנֵי תְהוֹם וְרוּחַ אֱלֹהִים מְרַחֶפֶת עַל פְּנֵי הַמָּיִם'],
-  'b3':['Bereishis 1:3','וַיֹּאמֶר אֱלֹהִים יְהִי אוֹר וַיְהִי אוֹר'],
-  'b4':['Bereishis 1:4','וַיַּרְא אֱלֹהִים אֶת הָאוֹר כִּי טוֹב וַיַּבְדֵּל אֱלֹהִים בֵּין הָאוֹר וּבֵין הַחֹשֶׁךְ'],
-  'b5':['Bereishis 1:5','וַיִּקְרָא אֱלֹהִים לָאוֹר יוֹם וְלַחֹשֶׁךְ קָרָא לָיְלָה וַיְהִי עֶרֶב וַיְהִי בֹקֶר יוֹם אֶחָד'],
-  't23':['Tehillim 23:2–3','בִּנְאוֹת דֶּשֶׁא יַרְבִּיצֵנִי עַל מֵי מְנֻחוֹת יְנַהֲלֵנִי נַפְשִׁי יְשׁוֹבֵב יַנְחֵנִי בְמַעְגְּלֵי צֶדֶק לְמַעַן שְׁמוֹ'],
-  'custom':['My own passage','']
-};
 const AI_VERSION='checker-v3';
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]);
@@ -214,8 +216,7 @@ const listToMarks=l=>new Set((l||[]).map(x=>`${x.w}:${x.c}:${x.type}`));
 function showView(view){for(const v of['setup','login','test','review','classes'])$('v-'+v).hidden=v!==view;
   document.querySelectorAll('#nav [data-view]').forEach(b=>b.classList.toggle('on',b.dataset.view===view));}
 async function start(){
-  for(const[k,[t]]of Object.entries(PASSAGES))$('t-passage').add(new Option(t,k));
-  addLevelOptions($('t-passage'));newLevelWords();
+  addLevelOptions($('t-level'));
   if(SUPABASE_URL.startsWith('YOUR')){showView('setup');return;}
   sb=supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
   const{data}=await sb.auth.getSession();
@@ -228,7 +229,7 @@ $('pass').onkeydown=e=>{if(e.key==='Enter')$('login').click();};
 $('signout').onclick=async()=>{await sb.auth.signOut();$('nav').hidden=true;showView('login');msg('Signed out.');};
 document.querySelectorAll('#nav [data-view]').forEach(b=>b.onclick=()=>{showView(b.dataset.view);msg('');
   if(b.dataset.view==='review')loadTests();if(b.dataset.view==='classes')drawClasses();});
-async function enter(){$('nav').hidden=false;msg('');await loadRoster();showView('test');drawTest();}
+async function enter(){$('nav').hidden=false;msg('');await loadRoster();showView('test');await setupReading();}
 
 async function loadRoster(){
   const c=await sb.from('classes').select('*').order('name');const s=await sb.from('students').select('*').eq('active',true).order('name');
@@ -246,17 +247,68 @@ $('r-class').onchange=()=>fillStudents('r-class','r-student',true);
 
 // ===== Testing =====
 let tMarks=new Set(),blob=null,recorder=null,chunks=[],recStart=0,tick=null,saving=false;
-let levelText='';
-const isLevel=()=>$('t-passage').value.startsWith('lvl-');
-function newLevelWords(){levelText=isLevel()?makeLevelWords($('t-passage').value):'';$('t-level-info').textContent=isLevel()?levelInfo($('t-passage').value):'';$('t-new').hidden=!isLevel();$('t-verse').classList.toggle('list',isLevel());}
-const passageText=()=>isLevel()?levelText:$('t-passage').value==='custom'?$('t-custom').value.trim():PASSAGES[$('t-passage').value][1];
-const passageTitle=()=>isLevel()?levelTitle($('t-passage').value):$('t-passage').value==='custom'?'Custom passage':PASSAGES[$('t-passage').value][0];
+// ----- What the student reads: a darga word list or a passage -----
+let curText='',curTitle='';
+const isDarga=()=>$('t-type').value==='darga';
+const passageText=()=>!isDarga()&&$('t-source').value==='custom'?$('t-custom').value.trim():curText;
+const passageTitle=()=>!isDarga()&&$('t-source').value==='custom'?'Custom passage':curTitle;
+function cleanHe(x){return String(x).replace(/<[^>]+>/g,'').replace(/&[a-z]+;/g,' ').replace(/\{[^}]*\}/g,'')
+  .replace(/[\u0591-\u05AF\u05BD\u05BF\u05C0\u05C3-\u05C6]/g,'').replace(/\u05BE/g,' ').replace(/[:,.;!?()\[\]׳״"']/g,' ').replace(/\s+/g,' ').trim();}
+async function cached(key,loader){try{const c=localStorage.getItem(key);if(c)return JSON.parse(c);}catch{}
+  const v=await loader();try{localStorage.setItem(key,JSON.stringify(v));}catch{}return v;}
+const SIDDUR=[['Modeh Ani','Modeh Ani'],['Netilat Yadayim','Netilas Yadayim'],['Asher Yatzar','Asher Yatzar'],['Elokai Neshama','Elokai Neshama'],['Torah Blessings','Birchos HaTorah'],['Morning Blessings','Birchos HaShachar']];
+for(const[k,l]of SIDDUR)$('t-section').add(new Option(l,k));
+function units(){
+  if($('t-source').value==='bereishis')return cached('kriah-src-bereishis-v1',async()=>{
+    const j=await(await fetch('https://www.sefaria.org/api/v3/texts/Genesis.1.1-6.8?version=hebrew|Miqra%20according%20to%20the%20Masorah')).json();
+    const out=[];j.versions[0].text.forEach((ch,ci)=>[].concat(ch).forEach((p,pi)=>out.push({ref:`${ci+1}:${pi+1}`,text:cleanHe(p)})));return out;});
+  const sec=$('t-section').value;
+  return cached('kriah-src-siddur-v1-'+sec,async()=>{
+    const j=await(await fetch('https://www.sefaria.org/api/v3/texts/'+encodeURIComponent('Siddur Ashkenaz, Weekday, Shacharit, Preparatory Prayers, '+sec))).json();
+    const v=j.versions.find(x=>x.language==='he')||j.versions[0];
+    return[].concat(v.text).flat(3).map((t,i)=>({ref:String(i+1),text:cleanHe(t)})).filter(u=>u.text);});
+}
+let unitList=[];
+async function loadSource(){
+  const src=$('t-source').value;$('t-custom-box').hidden=src!=='custom';$('t-section-box').hidden=src!=='davening';
+  $('t-start-box').hidden=$('t-len-box').hidden=src==='custom';
+  if(src==='custom'){curText='';$('t-level-info').textContent='';return;}
+  try{msg('Loading text…');unitList=await units();msg('');}catch(e){console.error(e);msg('Could not load the text. Check the internet connection.');unitList=[];}
+  const bere=src==='bereishis';$('t-len-label').textContent=bere?'How many psukim':'How many lines';
+  $('t-start').innerHTML=unitList.map((u,i)=>`<option value="${i}">${bere?u.ref+' · ':'Line '+u.ref+' · '}${esc(u.text.split(' ').slice(0,3).join(' '))}</option>`).join('');
+  $('t-len').max=Math.max(1,unitList.length);if(!bere)$('t-len').value=Math.min(+$('t-len').value||1,unitList.length)||unitList.length;
+  buildPassage();
+}
+function buildPassage(){
+  if(!unitList.length){curText='';return;}
+  const a=+$('t-start').value||0,n=Math.max(1,Math.min(+$('t-len').value||1,unitList.length-a)),part=unitList.slice(a,a+n);
+  curText=part.map(u=>u.text).join(' ');
+  if($('t-source').value==='bereishis')curTitle=`Bereishis ${part[0].ref}${n>1?'–'+part[n-1].ref:''}`;
+  else{const sec=$('t-section').selectedOptions[0].text;curTitle=unitList.length>1?`Davening: ${sec} (lines ${part[0].ref}${n>1?'–'+part[n-1].ref:''})`:`Davening: ${sec}`;}
+  $('t-level-info').textContent=$('t-source').value==='davening'?'Standard siddur text (same as Chabad for these sections), without trop.':'Chumash text with nikud, without trop.';
+}
+function newLevelWords(){
+  const v=$('t-level').value,c=Math.max(3,Math.min(80,+$('t-count').value||12));
+  curText=makeLevelWords(v,c);curTitle=levelTitle(v);
+  const u=levelUniqueCount(v);$('t-level-info').textContent=levelInfo(v)+(u&&c>u?` · This darga has ${u} different words, so some repeat.`:'');
+}
+async function setupReading(){
+  $('t-darga-box').hidden=!isDarga();$('t-passage-box').hidden=isDarga();$('t-new').hidden=!isDarga();
+  $('t-verse').classList.toggle('list',isDarga());
+  if(isDarga()){$('t-custom-box').hidden=true;newLevelWords();}else await loadSource();
+  tMarks.clear();drawTest();
+}
+$('t-type').onchange=setupReading;
+$('t-level').onchange=()=>{newLevelWords();tMarks.clear();drawTest();};
+$('t-count').onchange=()=>{newLevelWords();tMarks.clear();drawTest();};
+$('t-source').onchange=async()=>{await loadSource();tMarks.clear();drawTest();};
+$('t-section').onchange=async()=>{$('t-len').value=99;await loadSource();tMarks.clear();drawTest();};
+$('t-start').onchange=$('t-len').onchange=()=>{buildPassage();tMarks.clear();drawTest();};
+$('t-new').onclick=()=>{newLevelWords();tMarks.clear();drawTest();};
 function drawTest(){drawVerse($('t-verse'),passageText(),tMarks);updateSave();
-  $('t-count').textContent=tMarks.size?`${tMarks.size} mark${tMarks.size>1?'s':''}`:'No mistakes marked';}
+  $('t-count-marks').textContent=tMarks.size?`${tMarks.size} mark${tMarks.size>1?'s':''}`:'No mistakes marked';}
 function updateSave(){$('t-save').disabled=saving||!blob||!$('t-student').value||!passageText();}
 enableMarking($('t-verse'),()=>tMarks,drawTest);
-$('t-passage').onchange=()=>{$('t-custom-box').hidden=$('t-passage').value!=='custom';newLevelWords();tMarks.clear();drawTest();};
-$('t-new').onclick=()=>{newLevelWords();tMarks.clear();drawTest();};
 $('t-custom').oninput=()=>{tMarks.clear();drawTest();};
 $('t-student').onchange=updateSave;
 $('t-clear').onclick=()=>{tMarks.clear();drawTest();};
@@ -284,7 +336,7 @@ $('t-save').onclick=async()=>{
   finally{saving=false;updateSave();}
 };
 function nextStudent(){tMarks.clear();blob=null;$('t-play').hidden=true;$('timer').textContent='';$('rec').textContent='Record';
-  const el=$('t-student');if(el.selectedIndex<el.options.length-1)el.selectedIndex++;if(isLevel())newLevelWords();drawTest();}
+  const el=$('t-student');if(el.selectedIndex<el.options.length-1)el.selectedIndex++;if(isDarga())newLevelWords();drawTest();}
 $('t-next').onclick=()=>{nextStudent();msg('');};
 
 // ===== Classes =====
