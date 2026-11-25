@@ -52,13 +52,17 @@ const LEVELS=[
 for(const l of LEVELS)l.id=l.id||'l'+l.n;
 const byN=Object.fromEntries(LEVELS.map(l=>[l.n,l]));
 
+let lastUnique=0,lastWant=0;
+// Fill up to the requested count; if a darga has fewer different items, repeat them in a new random order.
+function fill(unique,want){lastUnique=unique.length;lastWant=want;if(!unique.length)return[];
+  const out=shuffle(unique);while(out.length<want)out.push(...shuffle(unique));return out.slice(0,want);}
 function wordsFor(l,count){
-  if(l.words){const want=count||10,out=[];while(out.length<want)out.push(...shuffle(l.words));return out.slice(0,want);}
+  if(l.words)return fill(l.words,count||10);
   if(l.mix){const pool=l.mix==='all'?LEVELS.filter(x=>!x.mix&&!x.letters&&x.n!=='1'):l.mix.map(n=>byN[n]);
-    const out=new Set();let guard=0;while(out.size<(count||12)&&guard++<500){const x=pick(pool);out.add(x.words?pick(x.words):x.gen());}return[...out];}
+    const out=new Set();let guard=0;while(out.size<(count||12)&&guard++<2000){const x=pick(pool);out.add(x.words?pick(x.words):x.gen());}return fill([...out],count||12);}
   const out=new Set();let guard=0;const want=count||l.count||12;
-  while(out.size<want&&guard++<1000)out.add(l.gen());
-  return[...out];}
+  while(out.size<want&&guard++<3000)out.add(l.gen());
+  return fill([...out],want);}
 
 const find=v=>LEVELS.find(l=>'lvl-'+l.id===v);
 window.addLevelOptions=function(select){
@@ -66,7 +70,7 @@ window.addLevelOptions=function(select){
   for(const l of LEVELS)g.append(new Option(`דרגא ${l.n}${l.p?' · '+l.p:''} · ${l.ex}`,'lvl-'+l.id));
   select.prepend(g);select.value='lvl-'+LEVELS[0].id;};
 window.makeLevelWords=(v,count)=>{const l=find(v);return l?wordsFor(l,count).join(' '):'';};
-window.levelUniqueCount=v=>{const l=find(v);return l&&l.words?l.words.length:0;};
+window.levelUniqueCount=()=>lastUnique<lastWant?lastUnique:0;
 window.levelInfo=v=>{const l=find(v);return l?`${l.d}${l.ex!=='—'?' (e.g. '+l.ex+')':''}`:'';};
 window.levelTitle=v=>{const l=find(v);return l?`דרגא ${l.n}${l.p?' · '+l.p:''}`:'';};
 window.KRIAH_LEVELS=LEVELS;
