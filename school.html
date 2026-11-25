@@ -34,6 +34,7 @@ textarea{width:100%}
 /* Passuk with tappable letters */
 .verse{direction:rtl;text-align:center;font:700 clamp(2.4rem,7vw,4rem)/1.9 'Frank Ruhl Libre','Times New Roman',serif;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;touch-action:manipulation;margin:6px 0}
 .verse .w{display:inline-block;white-space:nowrap;margin:0 .14em}
+.verse.list .w{margin:0 .5em}
 .verse .L{display:inline-block;position:relative;padding:.08em .02em;border-radius:.14em;cursor:pointer;line-height:1.35}
 .verse .L:hover{background:color-mix(in srgb,var(--accent) 10%,transparent)}
 .verse .L.letter{background:var(--yel-bg);color:var(--yel)}
@@ -97,6 +98,7 @@ progress{width:min(100%,360px);accent-color:var(--accent)}
       <div><label class="f" for="t-student">Student</label><select id="t-student"></select></div>
       <div><label class="f" for="t-passage">Passage</label><select id="t-passage"></select></div>
     </div>
+    <p class="muted" id="t-level-info" style="margin:8px 0 0"></p>
     <div id="t-custom-box" hidden style="margin-top:10px"><label class="f" for="t-custom">Hebrew with nikud</label>
       <textarea id="t-custom" dir="rtl" lang="he" rows="2" style="font:500 1.4rem 'Frank Ruhl Libre',serif"></textarea></div>
   </div>
@@ -111,6 +113,7 @@ progress{width:min(100%,360px);accent-color:var(--accent)}
     <div class="rec-row">
       <button id="rec" type="button">Record</button><span id="timer"></span>
       <button class="btn" id="t-clear" type="button">Clear marks</button>
+      <button class="btn" id="t-new" type="button" hidden>New words</button>
     </div>
     <audio id="t-play" controls hidden></audio>
     <div class="rec-row">
@@ -158,6 +161,7 @@ progress{width:min(100%,360px);accent-color:var(--accent)}
 </div>
 
 <script src="core.js"></script>
+<script src="levels.js"></script>
 <script>
 // ===== School settings: fill these in from Supabase > Project Settings > API =====
 const SUPABASE_URL='https://jdbetusvkpewmockmbds.supabase.co';
@@ -211,6 +215,7 @@ function showView(view){for(const v of['setup','login','test','review','classes'
   document.querySelectorAll('#nav [data-view]').forEach(b=>b.classList.toggle('on',b.dataset.view===view));}
 async function start(){
   for(const[k,[t]]of Object.entries(PASSAGES))$('t-passage').add(new Option(t,k));
+  addLevelOptions($('t-passage'));newLevelWords();
   if(SUPABASE_URL.startsWith('YOUR')){showView('setup');return;}
   sb=supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
   const{data}=await sb.auth.getSession();
@@ -241,13 +246,17 @@ $('r-class').onchange=()=>fillStudents('r-class','r-student',true);
 
 // ===== Testing =====
 let tMarks=new Set(),blob=null,recorder=null,chunks=[],recStart=0,tick=null,saving=false;
-const passageText=()=>$('t-passage').value==='custom'?$('t-custom').value.trim():PASSAGES[$('t-passage').value][1];
-const passageTitle=()=>$('t-passage').value==='custom'?'Custom passage':PASSAGES[$('t-passage').value][0];
+let levelText='';
+const isLevel=()=>$('t-passage').value.startsWith('lvl-');
+function newLevelWords(){levelText=isLevel()?makeLevelWords($('t-passage').value):'';$('t-level-info').textContent=isLevel()?levelInfo($('t-passage').value):'';$('t-new').hidden=!isLevel();$('t-verse').classList.toggle('list',isLevel());}
+const passageText=()=>isLevel()?levelText:$('t-passage').value==='custom'?$('t-custom').value.trim():PASSAGES[$('t-passage').value][1];
+const passageTitle=()=>isLevel()?levelTitle($('t-passage').value):$('t-passage').value==='custom'?'Custom passage':PASSAGES[$('t-passage').value][0];
 function drawTest(){drawVerse($('t-verse'),passageText(),tMarks);updateSave();
   $('t-count').textContent=tMarks.size?`${tMarks.size} mark${tMarks.size>1?'s':''}`:'No mistakes marked';}
 function updateSave(){$('t-save').disabled=saving||!blob||!$('t-student').value||!passageText();}
 enableMarking($('t-verse'),()=>tMarks,drawTest);
-$('t-passage').onchange=()=>{$('t-custom-box').hidden=$('t-passage').value!=='custom';tMarks.clear();drawTest();};
+$('t-passage').onchange=()=>{$('t-custom-box').hidden=$('t-passage').value!=='custom';newLevelWords();tMarks.clear();drawTest();};
+$('t-new').onclick=()=>{newLevelWords();tMarks.clear();drawTest();};
 $('t-custom').oninput=()=>{tMarks.clear();drawTest();};
 $('t-student').onchange=updateSave;
 $('t-clear').onclick=()=>{tMarks.clear();drawTest();};
@@ -275,7 +284,7 @@ $('t-save').onclick=async()=>{
   finally{saving=false;updateSave();}
 };
 function nextStudent(){tMarks.clear();blob=null;$('t-play').hidden=true;$('timer').textContent='';$('rec').textContent='Record';
-  const el=$('t-student');if(el.selectedIndex<el.options.length-1)el.selectedIndex++;drawTest();}
+  const el=$('t-student');if(el.selectedIndex<el.options.length-1)el.selectedIndex++;if(isLevel())newLevelWords();drawTest();}
 $('t-next').onclick=()=>{nextStudent();msg('');};
 
 // ===== Classes =====
