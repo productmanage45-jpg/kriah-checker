@@ -271,16 +271,23 @@ document.querySelectorAll('#nav [data-view]').forEach(b=>b.onclick=()=>{showView
 async function enter(){$('nav').hidden=false;msg('');await loadRoster();await window.applyRole?.();showView('test');await setupReading();
   window.loadRealWords?.().then(()=>{if(isDarga()&&!blob&&!tMarks.size){newLevelWords();drawTest();}}).catch(()=>{});}
 
+// ---- Sorting: classes in alef-beis order, students by last name ----
+const HEB_IDX={aleph:1,alef:1,beis:2,bais:2,bet:2,beth:2,gimel:3,daled:4,dalet:4,hey:5,hei:5,vav:6,vov:6,zayin:7,ches:8,chet:8,tes:9,tet:9,yud:10,yod:10,kaf:11,chof:11,lamed:12,mem:13,nun:14,samech:15,ayin:16,pey:17,pei:17,tzadik:18,kuf:19,reish:20,shin:21,tav:22,taf:22};
+function classKey(n){let idx=99;const rest=[];for(const p of String(n).trim().split(/\s+/)){const k=HEB_IDX[p.toLowerCase()];if(k&&idx===99)idx=k;else rest.push(p);}return[rest.join(' ').toLowerCase(),idx,String(n).toLowerCase()];}
+const cmpClass=(a,b)=>{const x=classKey(a.name),y=classKey(b.name);return x[0].localeCompare(y[0],undefined,{numeric:true})||x[1]-y[1]||x[2].localeCompare(y[2]);};
+function splitName(n){const p=String(n||'').trim().split(/\s+/);return p.length>1?{last:p[p.length-1],first:p.slice(0,-1).join(' ')}:{last:p[0]||'',first:''};}
+const studentLabel=s=>{const{last,first}=splitName(s?.name);return first?`${last}, ${first}`:last;};
+const cmpStudent=(a,b)=>{const x=splitName(a.name),y=splitName(b.name);return x.last.localeCompare(y.last)||x.first.localeCompare(y.first);};
 async function loadRoster(){
   const c=await sb.from('classes').select('*').order('name');const s=await sb.from('students').select('*').eq('active',true).order('name');
   if(c.error||s.error){msg('Could not load classes. Check the database setup.');return;}
-  classes=c.data;students=s.data;
+  classes=c.data.sort(cmpClass);students=s.data.sort(cmpStudent);
   for(const id of['t-class','r-class']){const el=$(id),keep=el.value;el.innerHTML=(id==='r-class'?'<option value="">All classes</option>':'')+classes.map(x=>`<option value="${x.id}">${esc(x.name)}</option>`).join('');if(keep)el.value=keep;}
   fillStudents('t-class','t-student',false);fillStudents('r-class','r-student',true);
 }
 function fillStudents(classSel,studentSel,all){const cid=$(classSel).value,el=$(studentSel),keep=el.value;
   const list=students.filter(s=>!cid||s.class_id===cid);
-  el.innerHTML=(all?'<option value="">All students</option><option value="training">★ Training recordings</option>':'<option value="training">★ Training only (no student)</option>')+list.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('');
+  el.innerHTML=(all?'<option value="">All students</option><option value="training">★ Training recordings</option>':'<option value="training">★ Training only (no student)</option>')+list.map(s=>`<option value="${s.id}">${esc(studentLabel(s))}</option>`).join('');
   if(!all&&!keep&&list.length)el.value=list[0].id;
   if(keep&&list.some(s=>s.id===keep))el.value=keep;}
 $('t-class').onchange=()=>fillStudents('t-class','t-student',false);
@@ -348,9 +355,10 @@ $('t-start').onchange=$('t-len').onchange=()=>{buildPassage();tMarks.clear();dra
 $('t-new').onclick=()=>{newLevelWords();tMarks.clear();drawTest();};
 // In full screen, make the letters as big as possible while the whole reading still fits.
 function fitVerse(){const v=$('t-verse');if(!$('t-card').classList.contains('focus')){v.style.fontSize='';return;}
+  if(v.clientHeight<60||v.clientWidth<60){clearTimeout(fitVerse.t);fitVerse.t=setTimeout(fitVerse,500);return;}
   let lo=16,hi=420;for(let i=0;i<15;i++){const mid=(lo+hi)/2;v.style.fontSize=mid+'px';if(v.scrollHeight<=v.clientHeight+1&&v.scrollWidth<=v.clientWidth+1)lo=mid;else hi=mid;}
   v.style.fontSize=Math.floor(lo)+'px';}
-addEventListener('resize',()=>fitVerse());
+addEventListener('resize',()=>fitVerse());document.addEventListener('visibilitychange',()=>fitVerse());addEventListener('orientationchange',()=>setTimeout(fitVerse,300));
 function drawTest(){drawVerse($('t-verse'),passageText(),tMarks);updateSave();fitVerse();
   if($('t-card').classList.contains('focus'))$('t-focus-title').textContent=`${$('t-student').selectedOptions[0]?.text||''} · ${passageTitle()}`;
   $('t-count-marks').textContent=tMarks.size?`${tMarks.size} mark${tMarks.size>1?'s':''}`:'No mistakes marked';}
@@ -398,7 +406,7 @@ $('t-next').onclick=()=>{nextStudent();msg('');};
 // ===== Classes =====
 async function drawClasses(){await loadRoster();
   $('c-table').innerHTML='<tr><th>Class</th><th>Students</th></tr>'+classes.map(c=>{const list=students.filter(s=>s.class_id===c.id);
-    return `<tr><td><b>${esc(c.name)}</b></td><td>${list.map(s=>`${esc(s.name)} <span class="muted">${s.parent_email?esc(s.parent_email):'no parent email'}</span> <button class="btn" style="padding:2px 8px;font-size:.8rem" data-email="${s.id}" type="button">email</button> <button class="btn" style="padding:2px 8px;font-size:.8rem" data-rm="${s.id}" type="button">remove</button>`).join('<br>')||'—'}</td></tr>`;}).join('');}
+    return `<tr><td><b>${esc(c.name)}</b></td><td>${list.map(s=>`${esc(studentLabel(s))} <span class="muted">${s.parent_email?esc(s.parent_email):'no parent email'}</span> <button class="btn" style="padding:2px 8px;font-size:.8rem" data-email="${s.id}" type="button">email</button> <button class="btn" style="padding:2px 8px;font-size:.8rem" data-rm="${s.id}" type="button">remove</button>`).join('<br>')||'—'}</td></tr>`;}).join('');}
 $('c-table').addEventListener('click',async e=>{const id=e.target.dataset.email;if(!id)return;const st=students.find(x=>x.id===id);
   const v=prompt(`Parent email for ${st.name} (leave empty to remove):`,st.parent_email||'');if(v===null)return;
   const r=await sb.from('students').update({parent_email:v.trim()||null}).eq('id',id);
@@ -426,7 +434,7 @@ async function loadTests(){
   if($('r-student').value==='training')q=q.is('student_id',null);
   else{if($('r-class').value)q=q.eq('class_id',$('r-class').value);if($('r-student').value)q=q.eq('student_id',$('r-student').value);}
   const r=await q;if(r.error){msg('Could not load tests.');return;}tests=r.data;
-  const name=id=>id?(students.find(s=>s.id===id)?.name||'(removed)'):'★ Training';
+  const name=id=>id?(students.some(s=>s.id===id)?studentLabel(students.find(s=>s.id===id)):'(removed)'):'★ Training';
   $('r-table').innerHTML='<tr><th>Date</th><th>Student</th><th>Passage</th><th>Teacher marks</th><th>AI agreement</th></tr>'+tests.map(t=>{
     const c=t.ai_marks?compare(listToMarks(t.teacher_marks),listToMarks(t.ai_marks)):null;
     return `<tr class="click" data-id="${t.id}"><td>${new Date(t.created_at).toLocaleString()}</td><td>${esc(name(t.student_id))}</td><td>${esc(t.passage_title)}</td><td>${(t.teacher_marks||[]).length}</td><td>${c?`${c.agree} agree · ${c.missed} missed · ${c.extra} false`:'not checked'}</td></tr>`;}).join('');

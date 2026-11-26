@@ -80,7 +80,7 @@ function drawOverview(){
   const head=`<tr><th>Student</th><th>Holding at</th>${LEVELS.map(l=>`<th title="${esc(l.d)}">${esc(l.n==='סופי'?'ס':l.n)}</th>`).join('')}<th>Last test</th></tr>`;
   const rows=kids.map(s=>{const mine=tests.filter(t=>t.student_id===s.id),by=latestByLevel(mine),h=holding(by);
     const last=mine[mine.length-1];
-    return `<tr class="click" data-sid="${s.id}"><td><b>${esc(s.name)}</b></td><td>${h?'דרגא '+esc(h.n):'✓ all'}</td>`+
+    return `<tr class="click" data-sid="${s.id}"><td><b>${esc(studentLabel(s))}</b></td><td>${h?'דרגא '+esc(h.n):'✓ all'}</td>`+
       LEVELS.map(l=>{const t=by.get(l.id);if(!t)return '<td></td>';const[,c]=statusOf(t.score);
         return `<td><span class="rp-cell rp-${c}" title="${fmtDate(t.created_at)}">${t.score}</span></td>`;}).join('')+
       `<td>${last?fmtDate(last.created_at):'—'}</td></tr>`;}).join('');
