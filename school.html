@@ -69,8 +69,13 @@ progress{width:min(100%,360px);accent-color:var(--accent)}
 .focus-only{display:none!important}
 #t-card.focus{position:fixed;inset:0;z-index:50;margin:0;border-radius:0;border:0;overflow:auto;padding:max(14px,env(safe-area-inset-top)) 18px max(16px,env(safe-area-inset-bottom))}
 #t-card.focus .focus-only{display:flex!important}
-#t-card.focus .verse{font-size:clamp(3rem,9vw,6.5rem);line-height:1.75;margin:18px 0}
-#t-card.focus .verse.list .w{margin:0 .35em}
+#t-card.focus{display:flex;flex-direction:column}
+#t-card.focus .legend,#t-card.focus #t-count-marks,#t-card.focus audio,#t-card.focus #t-clear{display:none!important}
+#t-card.focus .verse{flex:1 1 auto;min-height:0;display:flex;flex-wrap:wrap;align-content:center;justify-content:center;margin:2px 0;overflow:hidden;line-height:1.55}
+#t-card.focus .verse .w{margin:0 .18em}
+#t-card.focus .verse.list .w{margin:0 .4em}
+#t-card.focus .rec-row{margin-top:2px}
+#t-card.focus #rec{width:64px;height:64px}
 #t-card.focus #t-full{display:none}
 .focus-head{justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap}
 body.focus-lock{overflow:hidden}
@@ -341,14 +346,19 @@ $('t-source').onchange=async()=>{await loadSource();tMarks.clear();drawTest();};
 $('t-section').onchange=async()=>{$('t-len').value=99;await loadSource();tMarks.clear();drawTest();};
 $('t-start').onchange=$('t-len').onchange=()=>{buildPassage();tMarks.clear();drawTest();};
 $('t-new').onclick=()=>{newLevelWords();tMarks.clear();drawTest();};
-function drawTest(){drawVerse($('t-verse'),passageText(),tMarks);updateSave();
+// In full screen, make the letters as big as possible while the whole reading still fits.
+function fitVerse(){const v=$('t-verse');if(!$('t-card').classList.contains('focus')){v.style.fontSize='';return;}
+  let lo=16,hi=420;for(let i=0;i<15;i++){const mid=(lo+hi)/2;v.style.fontSize=mid+'px';if(v.scrollHeight<=v.clientHeight+1&&v.scrollWidth<=v.clientWidth+1)lo=mid;else hi=mid;}
+  v.style.fontSize=Math.floor(lo)+'px';}
+addEventListener('resize',()=>fitVerse());
+function drawTest(){drawVerse($('t-verse'),passageText(),tMarks);updateSave();fitVerse();
   if($('t-card').classList.contains('focus'))$('t-focus-title').textContent=`${$('t-student').selectedOptions[0]?.text||''} · ${passageTitle()}`;
   $('t-count-marks').textContent=tMarks.size?`${tMarks.size} mark${tMarks.size>1?'s':''}`:'No mistakes marked';}
 function updateSave(){$('t-save').disabled=saving||!blob||!$('t-student').value||!passageText();}
 enableMarking($('t-verse'),()=>tMarks,drawTest);
 $('t-custom').oninput=()=>{tMarks.clear();drawTest();};
 // Full-screen testing: bigger letters, easier to tap.
-function setFocus(on){$('t-card').classList.toggle('focus',on);document.body.classList.toggle('focus-lock',on);
+function setFocus(on){$('t-card').classList.toggle('focus',on);document.body.classList.toggle('focus-lock',on);requestAnimationFrame(fitVerse);setTimeout(fitVerse,400);
   if(on){$('t-focus-title').textContent=`${$('t-student').selectedOptions[0]?.text||''} · ${passageTitle()}`;$('t-focus-msg').textContent='';
     const el=document.documentElement;try{const r=(el.requestFullscreen||el.webkitRequestFullscreen)?.call(el);r?.catch?.(()=>{});}catch{}}
   else if(document.fullscreenElement||document.webkitFullscreenElement){try{(document.exitFullscreen||document.webkitExitFullscreen).call(document);}catch{}}}
