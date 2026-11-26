@@ -161,7 +161,7 @@ window.addLevelOptions=function(select){
   select.prepend(g);select.value='lvl-'+LEVELS[0].id;};
 window.makeLevelWords=(v,count)=>{const l=find(v);return l?wordsFor(l,count).join(' '):'';};
 window.levelUniqueCount=()=>lastUnique<lastWant?lastUnique:0;
-window.levelInfo=v=>{const l=find(v);if(!l)return '';const real=l.words?' · all real words':(REAL&&!l.letters&&REAL[realKey(l)]?.length?' · about half are real Chumash words':'');return `${l.d}${l.ex!=='—'?' (e.g. '+l.ex+')':''}${real}`;};
+window.levelInfo=v=>{const l=find(v);return l?`${l.d}${l.ex!=='—'?' (e.g. '+l.ex+')':''}`:'';};
 window.levelTitle=v=>{const l=find(v);return l?`דרגא ${l.n}${l.p?' · '+l.p:''}`:'';};
 window.KRIAH_LEVELS=LEVELS;
 })();
