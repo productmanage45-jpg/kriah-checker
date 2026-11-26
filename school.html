@@ -245,7 +245,7 @@ $('pass').onkeydown=e=>{if(e.key==='Enter')$('login').click();};
 $('signout').onclick=async()=>{await sb.auth.signOut();$('nav').hidden=true;showView('login');msg('Signed out.');};
 document.querySelectorAll('#nav [data-view]').forEach(b=>b.onclick=()=>{showView(b.dataset.view);msg('');
   if(b.dataset.view==='review')loadTests();if(b.dataset.view==='classes')drawClasses();});
-async function enter(){$('nav').hidden=false;msg('');await loadRoster();showView('test');await setupReading();}
+async function enter(){$('nav').hidden=false;msg('');await loadRoster();await window.applyRole?.();showView('test');await setupReading();}
 
 async function loadRoster(){
   const c=await sb.from('classes').select('*').order('name');const s=await sb.from('students').select('*').eq('active',true).order('name');
@@ -469,5 +469,6 @@ $('r-ai').onclick=async()=>{
 start();
 </script>
 <script src="reports.js"></script>
+<script src="teachers.js"></script>
 </body>
 </html>
