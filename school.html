@@ -272,7 +272,7 @@ async function enter(){$('nav').hidden=false;msg('');await loadRoster();await wi
   window.loadRealWords?.().then(()=>{if(isDarga()&&!blob&&!tMarks.size){newLevelWords();drawTest();}}).catch(()=>{});}
 
 // ---- Sorting: classes in alef-beis order, students by last name ----
-const HEB_IDX={aleph:1,alef:1,beis:2,bais:2,bet:2,beth:2,gimel:3,daled:4,dalet:4,hey:5,hei:5,vav:6,vov:6,zayin:7,ches:8,chet:8,tes:9,tet:9,yud:10,yod:10,kaf:11,chof:11,lamed:12,mem:13,nun:14,samech:15,ayin:16,pey:17,pei:17,tzadik:18,kuf:19,reish:20,shin:21,tav:22,taf:22};
+const HEB_IDX={aleph:1,alef:1,alf:1,beis:2,bais:2,beys:2,bet:2,beth:2,beit:2,gimel:3,gimmel:3,gimel:3,gimmal:3,daled:4,dalet:4,daleth:4,dalled:4,hey:5,hei:5,hay:5,he:5,vav:6,vov:6,vuv:6,waw:6,zayin:7,ches:8,chet:8,tes:9,tet:9,yud:10,yod:10,kaf:11,chof:11,lamed:12,mem:13,nun:14,samech:15,ayin:16,pey:17,pei:17,tzadik:18,kuf:19,reish:20,shin:21,tav:22,taf:22};
 function classKey(n){let idx=99;const rest=[];for(const p of String(n).trim().split(/\s+/)){const k=HEB_IDX[p.toLowerCase()];if(k&&idx===99)idx=k;else rest.push(p);}return[rest.join(' ').toLowerCase(),idx,String(n).toLowerCase()];}
 const cmpClass=(a,b)=>{const x=classKey(a.name),y=classKey(b.name);return x[0].localeCompare(y[0],undefined,{numeric:true})||x[1]-y[1]||x[2].localeCompare(y[2]);};
 function splitName(n){const p=String(n||'').trim().split(/\s+/);return p.length>1?{last:p[p.length-1],first:p.slice(0,-1).join(' ')}:{last:p[0]||'',first:''};}
