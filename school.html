@@ -66,6 +66,14 @@ tr.click{cursor:pointer}tr.click:hover td{background:color-mix(in srgb,var(--acc
 .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
 .stat{border:1px solid var(--line);border-radius:12px;padding:10px}.stat b{display:block;font-size:1.4rem}
 progress{width:min(100%,360px);accent-color:var(--accent)}
+.focus-only{display:none!important}
+#t-card.focus{position:fixed;inset:0;z-index:50;margin:0;border-radius:0;border:0;overflow:auto;padding:max(14px,env(safe-area-inset-top)) 18px max(16px,env(safe-area-inset-bottom))}
+#t-card.focus .focus-only{display:flex!important}
+#t-card.focus .verse{font-size:clamp(3rem,9vw,6.5rem);line-height:1.75;margin:18px 0}
+#t-card.focus .verse.list .w{margin:0 .35em}
+#t-card.focus #t-full{display:none}
+.focus-head{justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap}
+body.focus-lock{overflow:hidden}
 .welcome{text-align:center;max-width:620px;margin:28px auto 22px}
 .welcome-mark{display:inline-grid;place-items:center;width:72px;height:72px;border-radius:20px;background:var(--accent);color:var(--accent-ink);font:700 2.6rem/1 'Frank Ruhl Libre',serif;margin-bottom:12px}
 .welcome h2{font-size:clamp(1.7rem,5vw,2.4rem);margin:0 0 10px;letter-spacing:-.02em}
@@ -136,7 +144,8 @@ progress{width:min(100%,360px);accent-color:var(--accent)}
     <div id="t-custom-box" hidden style="margin-top:10px"><label class="f" for="t-custom">Hebrew with nikud</label>
       <textarea id="t-custom" dir="rtl" lang="he" rows="2" style="font:500 1.4rem 'Frank Ruhl Libre',serif"></textarea></div>
   </div>
-  <div class="card">
+  <div class="card" id="t-card">
+    <div class="focus-only focus-head"><div><b id="t-focus-title"></b><div class="muted" id="t-focus-msg"></div></div><button class="btn" id="t-exit" type="button">Exit full screen</button></div>
     <ul class="legend">
       <li><i style="background:var(--yel-bg)"></i>Tap top of letter: letter mistake</li>
       <li><i style="background:var(--miss-bg)"></i>Tap bottom: nikud mistake</li>
@@ -148,6 +157,7 @@ progress{width:min(100%,360px);accent-color:var(--accent)}
       <button id="rec" type="button">Record</button><span id="timer"></span>
       <button class="btn" id="t-clear" type="button">Clear marks</button>
       <button class="btn" id="t-new" type="button" hidden>New words</button>
+      <button class="btn primary" id="t-full" type="button">Full screen</button>
     </div>
     <audio id="t-play" controls hidden></audio>
     <div class="rec-row">
@@ -205,7 +215,7 @@ const SUPABASE_ANON_KEY='sb_publishable_iVQxmXnpLDBEYmanNDtlqQ_2C4y2uQf';
 const AI_VERSION='checker-v3';
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]);
-const msg=t=>$('msg').textContent=t||'';
+const msg=t=>{$('msg').textContent=t||'';const f=$('t-focus-msg');if(f)f.textContent=t||'';};
 let sb=null,classes=[],students=[];
 
 // ===== Letters =====
@@ -332,10 +342,19 @@ $('t-section').onchange=async()=>{$('t-len').value=99;await loadSource();tMarks.
 $('t-start').onchange=$('t-len').onchange=()=>{buildPassage();tMarks.clear();drawTest();};
 $('t-new').onclick=()=>{newLevelWords();tMarks.clear();drawTest();};
 function drawTest(){drawVerse($('t-verse'),passageText(),tMarks);updateSave();
+  if($('t-card').classList.contains('focus'))$('t-focus-title').textContent=`${$('t-student').selectedOptions[0]?.text||''} · ${passageTitle()}`;
   $('t-count-marks').textContent=tMarks.size?`${tMarks.size} mark${tMarks.size>1?'s':''}`:'No mistakes marked';}
 function updateSave(){$('t-save').disabled=saving||!blob||!$('t-student').value||!passageText();}
 enableMarking($('t-verse'),()=>tMarks,drawTest);
 $('t-custom').oninput=()=>{tMarks.clear();drawTest();};
+// Full-screen testing: bigger letters, easier to tap.
+function setFocus(on){$('t-card').classList.toggle('focus',on);document.body.classList.toggle('focus-lock',on);
+  if(on){$('t-focus-title').textContent=`${$('t-student').selectedOptions[0]?.text||''} · ${passageTitle()}`;$('t-focus-msg').textContent='';
+    const el=document.documentElement;try{const r=(el.requestFullscreen||el.webkitRequestFullscreen)?.call(el);r?.catch?.(()=>{});}catch{}}
+  else if(document.fullscreenElement||document.webkitFullscreenElement){try{(document.exitFullscreen||document.webkitExitFullscreen).call(document);}catch{}}}
+$('t-full').onclick=()=>setFocus(true);
+$('t-exit').onclick=()=>setFocus(false);
+for(const ev of['fullscreenchange','webkitfullscreenchange'])document.addEventListener(ev,()=>{if(!(document.fullscreenElement||document.webkitFullscreenElement)&&$('t-card').classList.contains('focus'))setFocus(false);});
 $('t-student').onchange=updateSave;
 $('t-clear').onclick=()=>{tMarks.clear();drawTest();};
 $('rec').onclick=async()=>{
